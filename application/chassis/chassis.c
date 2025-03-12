@@ -79,11 +79,11 @@ void ChassisInit()
     chassis_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_NORMAL;
     motor_lf = PowerControlInit(&chassis_motor_config);
 
-    chassis_motor_config.can_init_config.tx_id = 4;
+    chassis_motor_config.can_init_config.tx_id = 2;
     chassis_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_NORMAL;
     motor_rf = PowerControlInit(&chassis_motor_config);
 
-    chassis_motor_config.can_init_config.tx_id = 2;
+    chassis_motor_config.can_init_config.tx_id = 4;
     chassis_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_NORMAL;
     motor_lb = PowerControlInit(&chassis_motor_config);
 
@@ -98,20 +98,20 @@ void ChassisInit()
     chassis_pub = PubRegister("chassis_feed", sizeof(Chassis_Upload_Data_s));
 }
 
-#define LF_CENTER ((HALF_TRACK_WIDTH + CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE - CENTER_GIMBAL_OFFSET_Y) )//单位mm \\ DEGREE_2_RAD
-#define RF_CENTER ((HALF_TRACK_WIDTH - CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE - CENTER_GIMBAL_OFFSET_Y) )       // DEGREE_2_RAD
-#define LB_CENTER ((HALF_TRACK_WIDTH + CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE + CENTER_GIMBAL_OFFSET_Y) )       // DEGREE_2_RAD
-#define RB_CENTER ((HALF_TRACK_WIDTH - CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE + CENTER_GIMBAL_OFFSET_Y) )       // DEGREE_2_RAD
+#define LF_CENTER ((HALF_TRACK_WIDTH + CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE - CENTER_GIMBAL_OFFSET_Y) * DEGREE_2_RAD)
+#define RF_CENTER ((HALF_TRACK_WIDTH - CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE - CENTER_GIMBAL_OFFSET_Y) * DEGREE_2_RAD)
+#define LB_CENTER ((HALF_TRACK_WIDTH + CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE + CENTER_GIMBAL_OFFSET_Y) * DEGREE_2_RAD)
+#define RB_CENTER ((HALF_TRACK_WIDTH - CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE + CENTER_GIMBAL_OFFSET_Y) * DEGREE_2_RAD)
 /**
  * @brief 计算每个轮毂电机的输出,正运动学解算
  *        用宏进行预替换减小开销,运动解算具体过程参考教程
  */
 static void MecanumCalculate()
 {
-    vt_lf = -(float)((+chassis_vx - chassis_vy + chassis_cmd_recv.wz * LF_CENTER)/RADIUS_WHEEL);//w1 取反
-    vt_lb = (float)((+chassis_vx + chassis_vy - chassis_cmd_recv.wz * LB_CENTER)/RADIUS_WHEEL);//w2
-    vt_rb = (float)((+chassis_vx - chassis_vy - chassis_cmd_recv.wz * RB_CENTER)/RADIUS_WHEEL);//w3 取反
-    vt_rf = -(float)((+chassis_vx + chassis_vy + chassis_cmd_recv.wz * RF_CENTER)/RADIUS_WHEEL);//w4
+    vt_lf = -chassis_vx - chassis_vy - chassis_cmd_recv.wz * LF_CENTER;
+    vt_rf = -chassis_vx + chassis_vy - chassis_cmd_recv.wz * RF_CENTER;
+    vt_lb = chassis_vx - chassis_vy - chassis_cmd_recv.wz * LB_CENTER;
+    vt_rb = chassis_vx + chassis_vy - chassis_cmd_recv.wz * RB_CENTER;
 }
 
 /**
@@ -121,7 +121,7 @@ static void MecanumCalculate()
 static void LimitChassisOutput()
 {
     // 功率限制待添加
-    SetPowerLimit(referee_data->PowerHeatData.chassis_power > 0 ? referee_data->PowerHeatData.chassis_power : 60);
+    SetPowerLimit(referee_data->PowerHeatData.chassis_power > 0 ? referee_data->PowerHeatData.chassis_power : 40);
     // referee_data->PowerHeatData.chassis_power_buffer;
 
     // 完成功率限制后进行电机参考输入设定
@@ -137,12 +137,11 @@ static void LimitChassisOutput()
  *
  */
 static void EstimateSpeed()
-{               //w1                            w4                              //2                             //3
+{
     // 根据电机速度和陀螺仪的角速度进行解算,还可以利用加速度计判断是否打滑(如果有)
-    vx = (float)((+motor_lf->measure.speed_aps + motor_rf->measure.speed_aps + motor_lb->measure.speed_aps + motor_rb->measure.speed_aps) / REDUCTION_RATIO_WHEEL / 180.0f * PI / RADIUS_WHEEL / 1000.0f);
-    vy = (float)((-motor_lf->measure.speed_aps + motor_rf->measure.speed_aps + motor_lb->measure.speed_aps - motor_rb->measure.speed_aps) / REDUCTION_RATIO_WHEEL / 180.0f * PI / RADIUS_WHEEL / 1000.0f);
-    wz = (float)((-motor_lf->measure.speed_aps + motor_rf->measure.speed_aps - motor_lb->measure.speed_aps + motor_rb->measure.speed_aps) / 4.0f / REDUCTION_RATIO_WHEEL / (HALF_TRACK_WIDTH + CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE - CENTER_GIMBAL_OFFSET_Y) * RADIUS_WHEEL * 1000.0f);
-    // gimbal
+    vx = (motor_lf->measure.speed_aps - motor_rf->measure.speed_aps + motor_lb->measure.speed_aps - motor_rb->measure.speed_aps) / 4.0f / REDUCTION_RATIO_WHEEL / 360.0f * PERIMETER_WHEEL / 1000.0f / sqrt_2;
+    vy = (-motor_lf->measure.speed_aps - motor_rf->measure.speed_aps + motor_lb->measure.speed_aps + motor_rb->measure.speed_aps) / 4.0f / REDUCTION_RATIO_WHEEL / 360.0f * PERIMETER_WHEEL / 1000.0f / sqrt_2;
+    wz = (-motor_lf->measure.speed_aps - motor_rf->measure.speed_aps - motor_lb->measure.speed_aps - motor_rb->measure.speed_aps) / (LF_CENTER + RF_CENTER + LB_CENTER + RB_CENTER);
     chassis_feedback_data.real_vx = vx * cos_theta - vy * sin_theta;
     chassis_feedback_data.real_vy = +vx * sin_theta + vy * cos_theta;
 }
@@ -152,7 +151,7 @@ void ChassisTask()
 {
     SubGetMessage(chassis_sub, &chassis_cmd_recv);
 
-    SetPowerLimit(referee_data->PowerHeatData.chassis_power > 0 ? referee_data->PowerHeatData.chassis_power : 40);
+    SetPowerLimit(referee_data->GameRobotState.chassis_power_limit); //设置功率限制
     if (chassis_cmd_recv.chassis_mode == CHASSIS_ZERO_FORCE)
     {
         // 如果出现重要模块离线或遥控器设置为急停,让电机停止
@@ -177,10 +176,10 @@ void ChassisTask()
         chassis_cmd_recv.wz = 0;
         break;
     case CHASSIS_FOLLOW_GIMBAL_YAW: // 跟随云台,不单独设置pid,以误差角度平方为速度输出
-        chassis_cmd_recv.wz = 1.5f * chassis_cmd_recv.offset_angle * abs(chassis_cmd_recv.offset_angle);
+        chassis_cmd_recv.wz = 2.5f * chassis_cmd_recv.offset_angle * abs(chassis_cmd_recv.offset_angle);
         break;
     case CHASSIS_ROTATE: // 自旋,同时保持全向机动;当前wz维持定值,后续增加不规则的变速策略
-        chassis_cmd_recv.wz = 200;
+        chassis_cmd_recv.wz = 4000;
         break;
     default:
         break;
