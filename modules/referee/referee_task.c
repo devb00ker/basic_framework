@@ -26,6 +26,7 @@ uint8_t UI_Seq;                                      // 包序号，供整个ref
  * @retval none
  * @attention
  */
+ //初始化 接收端信息 红蓝判断
 static void DeterminRobotID() {
     // id小于7是红色,大于7是蓝色,0为红色，1为蓝色   #define Robot_Red 0    #define Robot_Blue 1
     referee_recv_info->referee_id.Robot_Color = referee_recv_info->GameRobotState.robot_id > 7 ? Robot_Blue : Robot_Red;
@@ -39,26 +40,26 @@ static void MyUIRefresh(referee_info_t *referee_recv_info, Referee_Interactive_i
 static void UIChangeCheck(Referee_Interactive_info_t *_Interactive_data); // 模式切换检测
 static void RobotModeTest(Referee_Interactive_info_t *_Interactive_data); // 测试用函数，实现模式自动变化
 
-referee_info_t *UITaskInit(UART_HandleTypeDef *referee_usart_handle, Referee_Interactive_info_t *UI_data) {
+referee_info_t *UITaskInit(UART_HandleTypeDef *referee_usart_handle, Referee_Interactive_info_t *UI_data) {//UI_data 为当前车的状态信息
     referee_recv_info = RefereeInit(referee_usart_handle); // 初始化裁判系统的串口,并返回裁判系统反馈数据指针
     Interactive_data = UI_data;                            // 获取UI绘制需要的机器人状态数据
     referee_recv_info->init_flag = 1;
-    return referee_recv_info;
+    return referee_recv_info;//返回裁判系统检测的状态信息
 }
 
-void UITask() {
+void UITask() {                     //测试函数 使用需调整
     RobotModeTest(Interactive_data); // 测试用函数，实现模式自动变化,用于检查该任务和裁判系统是否连接正常
     MyUIRefresh(referee_recv_info, Interactive_data);
 }
 
-static interaction_figure_t UI_shoot_line[10]; // 射击准线
-static interaction_figure_t UI_Energy[3];      // 电容能量条
-static String_Data_t UI_State_sta[6];  // 机器人状态,静态只需画一次
-static String_Data_t UI_State_dyn[6];  // 机器人状态,动态先add才能change
-static uint32_t shoot_line_location[10] = {540, 960, 490, 515, 565};
+static interaction_figure_t UI_shoot_line[10]; // 射击准线 图形
+static interaction_figure_t UI_Energy[3];      // 电容能量条 图形
+static ext_client_custom_character_t UI_State_sta[6];  // 机器人状态,静态只需画一次 字符
+static ext_client_custom_character_t UI_State_dyn[6];  // 机器人状态,动态先add才能change 字符
+static uint32_t shoot_line_location[10] = {540, 960, 490, 515, 565};//统一位置
 
 void MyUIInit() {
-    if (!referee_recv_info->init_flag)
+    if (!referee_recv_info->init_flag) //constrain: initialize serial of referee
         vTaskDelete(NULL); // 如果没有初始化裁判系统则直接删除ui任务
     while (referee_recv_info->GameRobotState.robot_id == 0)
         osDelay(100); // 若还未收到裁判系统数据,等待一段时间后再检查
@@ -249,7 +250,7 @@ static void MyUIRefresh(referee_info_t *referee_recv_info, Referee_Interactive_i
 }
 
 /**
- * @brief  模式切换检测,模式发生切换时，对flag置位
+ * @brief  模式切换检测,模式发生切换时，对flag置位 //记录上一次标志位
  * @param  Referee_Interactive_info_t *_Interactive_data
  * @retval none
  * @attention

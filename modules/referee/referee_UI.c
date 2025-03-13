@@ -32,7 +32,7 @@ void UIDelete(referee_id_t *_id, uint8_t Del_Operate, uint8_t Del_Layer)
 
 	UI_delete_data.CmdID = ID_student_interactive;
 
-	UI_delete_data.datahead.data_cmd_id = UI_Data_ID_Del;
+	UI_delete_data.datahead.data_cmd_id = UI_Data_ID_Del;//字内容ID
 	UI_delete_data.datahead.receiver_ID = _id->Cilent_ID;
 	UI_delete_data.datahead.sender_ID = _id->Robot_ID;
 
@@ -63,7 +63,7 @@ void UILineDraw(interaction_figure_t *graph, char graphname[3], uint32_t Graph_O
 	int i;
 	for (i = 0; i < 3 && graphname[i] != '\0'; i++) // 填充至‘0’为止
 	{
-		graph->graphic_name[2 - i] = graphname[i]; // 按内存地址增大方向填充，所以会有i与2-i
+		graph->figure_name[2 - i] = graphname[i]; // 按内存地址增大方向填充，所以会有i与2-i
 	}
 
 	graph->operate_tpye = Graph_Operate;
@@ -97,7 +97,7 @@ void UIRectangleDraw(interaction_figure_t *graph, char graphname[3], uint32_t Gr
 	int i;
 	for (i = 0; i < 3 && graphname[i] != '\0'; i++)
 	{
-		graph->graphic_name[2 - i] = graphname[i];
+		graph->figure_name[2 - i] = graphname[i];
 	}
 
 	graph->figure_tpye = UI_Graph_Rectangle;
@@ -132,7 +132,7 @@ void UICircleDraw(interaction_figure_t *graph, char graphname[3], uint32_t Graph
 	int i;
 	for (i = 0; i < 3 && graphname[i] != '\0'; i++)
 	{
-		graph->graphic_name[2 - i] = graphname[i];
+		graph->figure_name[2 - i] = graphname[i];
 	}
 
 	graph->figure_tpye = UI_Graph_Circle;
@@ -165,7 +165,7 @@ void UIOvalDraw(interaction_figure_t *graph, char graphname[3], uint32_t Graph_O
 	int i;
 	for (i = 0; i < 3 && graphname[i] != '\0'; i++)
 	{
-		graph->graphic_name[2 - i] = graphname[i];
+		graph->figure_name[2 - i] = graphname[i];
 	}
 
 	graph->figure_tpye = UI_Graph_Ellipse;
@@ -203,7 +203,7 @@ void UIArcDraw(interaction_figure_t *graph, char graphname[3], uint32_t Graph_Op
 	int i;
 	for (i = 0; i < 3 && graphname[i] != '\0'; i++)
 	{
-		graph->graphic_name[2 - i] = graphname[i];
+		graph->figure_name[2 - i] = graphname[i];
 	}
 
 	graph->figure_tpye = UI_Graph_Arc;
@@ -243,7 +243,7 @@ void UIFloatDraw(interaction_figure_t *graph, char graphname[3], uint32_t Graph_
 	int i;
 	for (i = 0; i < 3 && graphname[i] != '\0'; i++)
 	{
-		graph->graphic_name[2 - i] = graphname[i];
+		graph->figure_name[2 - i] = graphname[i];
 	}
 	graph->figure_tpye = UI_Graph_Float;
 	graph->operate_tpye = Graph_Operate;
@@ -280,7 +280,7 @@ void UIIntDraw(interaction_figure_t *graph, char graphname[3], uint32_t Graph_Op
 	int i;
 	for (i = 0; i < 3 && graphname[i] != '\0'; i++)
 	{
-		graph->graphic_name[2 - i] = graphname[i];
+		graph->figure_name[2 - i] = graphname[i];
 	}
 	graph->figure_tpye = UI_Graph_Int;
 	graph->operate_tpye = Graph_Operate;
@@ -311,13 +311,13 @@ void UIIntDraw(interaction_figure_t *graph, char graphname[3], uint32_t Graph_Op
 		fmt需要显示的字符串
 		此函数的实现和具体使用类似于printf函数
 **********************************************************************************************************/
-void UICharDraw(String_Data_t *graph, char graphname[3], uint32_t Graph_Operate, uint32_t Graph_Layer, uint32_t Graph_Color,
+void UICharDraw(ext_client_custom_character_t *graph, char graphname[3], uint32_t Graph_Operate, uint32_t Graph_Layer, uint32_t Graph_Color,
 				uint32_t Graph_Size, uint32_t Graph_Width, uint32_t Start_x, uint32_t Start_y, char *fmt, ...)
 {
 	int i;
 	for (i = 0; i < 3 && graphname[i] != '\0'; i++)
 	{
-		graph->Graph_Control.graphic_name[2 - i] = graphname[i];
+		graph->Graph_Control.figure_name[2 - i] = graphname[i];
 	}
 
 	graph->Graph_Control.figure_tpye = UI_Graph_Char;
@@ -335,9 +335,9 @@ void UICharDraw(String_Data_t *graph, char graphname[3], uint32_t Graph_Operate,
 
 	va_list ap;
 	va_start(ap, fmt);
-	vsprintf((char *)graph->show_Data, fmt, ap); // 使用参数列表进行格式化并输出到字符串
+	vsprintf((char *)graph->data, fmt, ap); // 使用参数列表进行格式化并输出到字符串
 	va_end(ap);
-	graph->Graph_Control.details_b = strlen((const char *)graph->show_Data);
+	graph->Graph_Control.details_b = strlen((const char *)graph->data);
 }
 
 /* UI推送函数（使更改生效）
@@ -396,7 +396,7 @@ void UIGraphRefresh(referee_id_t *_id, int cnt, ...)
 }
 
 /************************************************UI推送字符（使更改生效）*********************************/
-void UICharRefresh(referee_id_t *_id, String_Data_t string_Data)
+void UICharRefresh(referee_id_t *_id, ext_client_custom_character_t string_Data)
 {
 	static UI_CharReFresh_t UI_CharReFresh_data;
 

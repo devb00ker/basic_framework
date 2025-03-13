@@ -30,7 +30,7 @@ static referee_info_t referee_info;			  // 裁判系统数据
  * @retval 是否对正误判断做处理
  * @attention  在此判断帧头和CRC校验,无误再写入数据，不重复判断帧头
  */
-static void JudgeReadData(uint8_t *buff)
+static void JudgeReadData(uint8_t *buff)//指针
 {
 	uint16_t judge_length; // 统计一帧数据长度
 	if (buff == NULL)	   // 空数据包，则不作任何处理
@@ -51,19 +51,19 @@ static void JudgeReadData(uint8_t *buff)
 			if (Verify_CRC16_Check_Sum(buff, judge_length) == TRUE)
 			{
 				// 2个8位拼成16位int
-				referee_info.CmdID = (buff[6] << 8 | buff[5]);
+				referee_info.CmdID = (buff[6] << 8 | buff[5]);//高字节低地址 在F407为大端模式
 				// 解析数据命令码,将数据拷贝到相应结构体中(注意拷贝数据的长度)
 				// 第8个字节开始才是数据 data=7
 				switch (referee_info.CmdID)
 				{
 				case ID_game_state: // 0x0001
-					memcpy(&referee_info.GameState, (buff + DATA_Offset), LEN_game_state);
+					memcpy(&referee_info.GameState, (buff + DATA_Offset), LEN_game_state);//是否存在大小端？
 					break;
 				case ID_game_result: // 0x0002
 					memcpy(&referee_info.GameResult, (buff + DATA_Offset), LEN_game_result);
 					break;
-				case ID_game_robot_survivors: // 0x0003
-					memcpy(&referee_info.GameRobotHP, (buff + DATA_Offset), LEN_game_robot_survivors);
+				case ID_game_robot_HP: // 0x0003
+					memcpy(&referee_info.GameRobotHP, (buff + DATA_Offset), LEN_game_robot_HP);
 					break;
 				case ID_event_data: // 0x0101
 					memcpy(&referee_info.EventData, (buff + DATA_Offset), LEN_event_data);
@@ -71,23 +71,29 @@ static void JudgeReadData(uint8_t *buff)
 				case ID_supply_projectile_action: // 0x0102
 					memcpy(&referee_info.SupplyProjectileAction, (buff + DATA_Offset), LEN_supply_projectile_action);
 					break;
-				case ID_robot_status_t: // 0x0201
-					memcpy(&referee_info.GameRobotState, (buff + DATA_Offset), LEN_robot_status_t);
+                case ID_referee_warning: // 0x0104
+                    memcpy(&referee_info.SupplyProjectileAction, (buff + DATA_Offset), LEN_referee_warning);
+                    break;
+                case ID_dart_info: // 0x0105
+                    memcpy(&referee_info.SupplyProjectileAction, (buff + DATA_Offset), LEN_dart_info);
+                    break;
+				case ID_robot_status: // 0x0201
+					memcpy(&referee_info.GameRobotState, (buff + DATA_Offset), LEN_robot_status);
 					break;
 				case ID_power_heat_data: // 0x0202
 					memcpy(&referee_info.PowerHeatData, (buff + DATA_Offset), LEN_power_heat_data);
 					break;
-				case ID_game_robot_pos: // 0x0203
-					memcpy(&referee_info.GameRobotPos, (buff + DATA_Offset), LEN_game_robot_pos);
+				case ID_robot_pos: // 0x0203
+					memcpy(&referee_info.GameRobotPos, (buff + DATA_Offset), LEN_robot_pos);
 					break;
-				case ID_buff_t: // 0x0204
-					memcpy(&referee_info.BuffMusk, (buff + DATA_Offset), LEN_buff_t);
+				case ID_buff: // 0x0204
+					memcpy(&referee_info.BuffMusk, (buff + DATA_Offset), LEN_buff);
 					break;
-				case ID_air_support_data_t: // 0x0205
-					memcpy(&referee_info.AerialRobotEnergy, (buff + DATA_Offset), LEN_air_support_data_t);
+				case ID_air_support_data: // 0x0205
+					memcpy(&referee_info.AerialRobotEnergy, (buff + DATA_Offset), LEN_air_support_data);
 					break;
-				case ID_robot_hurt: // 0x0206
-					memcpy(&referee_info.RobotHurt, (buff + DATA_Offset), LEN_robot_hurt);
+				case ID_hurt_data: // 0x0206
+					memcpy(&referee_info.RobotHurt, (buff + DATA_Offset), LEN_hurt_robot);
 					break;
 				case ID_shoot_data: // 0x0207
 					memcpy(&referee_info.ShootData, (buff + DATA_Offset), LEN_shoot_data);
@@ -95,28 +101,50 @@ static void JudgeReadData(uint8_t *buff)
                 case ID_projectile_allowance: // 0x0208
                     memcpy(&referee_info.AllowanceProjectile, (buff + DATA_Offset), LEN_projectile_allowance);
                      break;
-                case ID_rfid_status_t: // 0x0209
-                    memcpy(&referee_info.RfidStatus, (buff + DATA_Offset), LEN_rfid_status_t);
+                case ID_rfid_status: // 0x0209
+                    memcpy(&referee_info.RfidStatus, (buff + DATA_Offset), LEN_rfid_status);
                     break;
                 case ID_darts_client_cmd: // 0x020A
                     memcpy(&referee_info.DartClient, (buff + DATA_Offset), LEN_darts_client_cmd);
                     break;
-                case ID_ground_robot_position_t: // 0x020B
-                    memcpy(&referee_info.RobotPostion, (buff + DATA_Offset), LEN_ground_robot_position_t);
+                case ID_ground_robot_position: // 0x020B
+                    memcpy(&referee_info.RobotPostion, (buff + DATA_Offset), LEN_ground_robot_position);
                     break;
-                case ID_radar_mark_data_t: // 0x020C
-                    memcpy(&referee_info.RadarMark, (buff + DATA_Offset), LEN_radar_mark_data_t);
+                case ID_radar_mark_data: // 0x020
+                    memcpy(&referee_info.RadarMark, (buff + DATA_Offset), LEN_radar_mark_data);
                     break;
-                case ID_sentry_info_t: // 0x020D
-                    memcpy(&referee_info.SentryInfo, (buff + DATA_Offset), LEN_sentry_info_t);
+                case ID_sentry_info: // 0x020D
+                    memcpy(&referee_info.SentryInfo, (buff + DATA_Offset), LEN_sentry_info);
                     break;
-                case ID_radar_info_t: // 0x020E
-                    memcpy(&referee_info.RadarInfo, (buff + DATA_Offset), LEN_radar_info_t);
+                case ID_radar_info: // 0x020E
+                    memcpy(&referee_info.RadarInfo, (buff + DATA_Offset), LEN_radar_info);
                     break;
                 case ID_student_interactive: // 0x0301   syhtodo接收代码未测试
 					memcpy(&referee_info.ReceiveData, (buff + DATA_Offset), LEN_student_interactive);
 					break;
-				}
+//                case ID_custom_robot_data: // 0x0302
+//                    memcpy(&referee_info.ReceiveData, (buff + DATA_Offset), LEN_custom_robot_data_t);
+//                    break;
+                case ID_map_command: // 0x0303
+                    memcpy(&referee_info.ReceiveData, (buff + DATA_Offset), LEN_map_command_t);
+                    break;
+                case ID_remote_control: // 0x0304
+                    memcpy(&referee_info.ReceiveData, (buff + DATA_Offset), LEN_remote_control_t);
+                    break;
+                case ID_map_robot_data: // 0x0305
+                    memcpy(&referee_info.ReceiveData, (buff + DATA_Offset), LEN_map_robot_data_t);
+                    break;
+                case ID_custom_client_data: // 0x0306
+                    memcpy(&referee_info.ReceiveData, (buff + DATA_Offset), LEN_custom_client_data_t);
+                    break;
+//                case ID_map_data: // 0x0307
+//                    memcpy(&referee_info.ReceiveData, (buff + DATA_Offset), LEN_map_data_t);
+//                    break;
+//                case ID_custom_info: // 0x0308
+//                    memcpy(&referee_info.ReceiveData, (buff + DATA_Offset), LEN_custom_info_t);
+//                    break;
+//需扩充自定义数据大小
+                }
 			}
 		}
 		// 首地址加帧长度,指向CRC16下一字节,用来判断是否为0xA5,从而判断一个数据包是否有多帧数据
