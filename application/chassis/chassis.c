@@ -56,7 +56,7 @@ void ChassisInit()
         .can_init_config.can_handle = &hcan1,
         .controller_param_init_config = {
             .speed_PID = {
-                .Kp = 4.5, // 4.5
+                .Kp = 20, // 4.5
                 .Ki = 0, // 0
                 .Kd = 0, // 0
                 .IntegralLimit = 3000,
@@ -106,7 +106,7 @@ void ChassisInit()
  * @brief 计算每个轮毂电机的输出,正运动学解算
  *        用宏进行预替换减小开销,运动解算具体过程参考教程
  */
-static void MecanumCalculate()
+static void Calculate()
 {
     vt_lf = -chassis_vx - chassis_vy - chassis_cmd_recv.wz * LF_CENTER;
     vt_rf = -chassis_vx + chassis_vy - chassis_cmd_recv.wz * RF_CENTER;
@@ -121,7 +121,7 @@ static void MecanumCalculate()
 static void LimitChassisOutput()
 {
     // 功率限制待添加
-    SetPowerLimit(referee_data->PowerHeatData.chassis_power > 0 ? referee_data->PowerHeatData.chassis_power : 40);//底盘功率
+    SetPowerLimit(referee_data->GameRobotState.chassis_power_limit > 0 ? referee_data->GameRobotState.chassis_power_limit : 40);//底盘功率
     // referee_data->PowerHeatData.chassis_power_buffer;
 
     // 完成功率限制后进行电机参考输入设定
@@ -193,7 +193,7 @@ void ChassisTask()
     chassis_vy = chassis_cmd_recv.vx * sin_theta + chassis_cmd_recv.vy * cos_theta;
 
     // 根据控制模式进行正运动学解算,计算底盘输出
-    MecanumCalculate();
+    Calculate();
 
     // 根据裁判系统的反馈数据和电容数据对输出限幅并设定闭环参考值
     LimitChassisOutput();
@@ -205,8 +205,8 @@ void ChassisTask()
     // // 我方颜色id小于7是红色,大于7是蓝色,注意这里发送的是对方的颜色, 0:blue , 1:red
     chassis_feedback_data.enemy_color = referee_data->GameRobotState.robot_id > 7 ? 1 : 0;
     // // 当前只做了17mm热量的数据获取,后续根据robot_def中的宏切换双枪管和英雄42mm的情况
-    // chassis_feedback_data.bullet_speed = referee_data->GameRobotState.shooter_id1_17mm_speed_limit;
-    // chassis_feedback_data.rest_heat = referee_data->PowerHeatData.shooter_heat0;
+//     chassis_feedback_data.bullet_speed = referee_data->GameRobotState.shooter_id1_17mm_speed_limit;
+//     chassis_feedback_data.rest_heat = referee_data->PowerHeatData.shooter_heat0;
 
     // 推送反馈消息
     PubPushMessage(chassis_pub, (void*)&chassis_feedback_data);

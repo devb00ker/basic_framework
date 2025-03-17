@@ -133,11 +133,11 @@ static void DecodeDJIMotor(CANInstance *_instance)
     // 解析数据并对电流和速度进行滤波,电机的反馈报文具体格式见电机说明手册
     measure->last_ecd = measure->ecd;
     measure->ecd = ((uint16_t)rxbuff[0]) << 8 | rxbuff[1];
-    measure->angle_single_round = ECD_ANGLE_COEF_DJI * (float)measure->ecd;//8192->360
+    measure->angle_single_round = ECD_ANGLE_COEF_DJI * (float)measure->ecd;//8192->360当前刻度对应的角度
     measure->speed_aps = (1.0f - SPEED_SMOOTH_COEF) * measure->speed_aps +
                          RPM_2_ANGLE_PER_SEC * SPEED_SMOOTH_COEF * (float)((int16_t)(rxbuff[2] << 8 | rxbuff[3]));//度每秒
     measure->real_current = (1.0f - CURRENT_SMOOTH_COEF) * measure->real_current +
-                            CURRENT_SMOOTH_COEF * (float)((int16_t)(rxbuff[4] << 8 | rxbuff[5]));
+                            CURRENT_SMOOTH_COEF * (float)((int16_t)(rxbuff[4] << 8 | rxbuff[5]));//电流和速度一阶低通滤波
     measure->temperature = rxbuff[6];
 
     // 多圈角度计算,前提是假设两次采样间电机转过的角度小于180°,自己画个图就清楚计算过程了

@@ -49,7 +49,7 @@ void ShootInit()
 
             .outer_loop_type = SPEED_LOOP,
             .close_loop_type = SPEED_LOOP | CURRENT_LOOP,
-            .motor_reverse_flag = MOTOR_DIRECTION_NORMAL,
+            .motor_reverse_flag = MOTOR_DIRECTION_REVERSE,
         },
         .motor_type = M3508
     };
@@ -57,7 +57,7 @@ void ShootInit()
         friction_l = DJIMotorInit(&friction_config);
 
     friction_config.can_init_config.tx_id = 6; // 右摩擦轮,改txid和方向就行
-    friction_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_REVERSE;
+    friction_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_NORMAL;
     friction_r = DJIMotorInit(&friction_config);
 
     // 拨盘电机
@@ -69,7 +69,7 @@ void ShootInit()
         .controller_param_init_config = {
             .angle_PID = {
                 // 如果启用位置环来控制发弹,需要较大的I值保证输出力矩的线性度否则出现接近拨出的力矩大幅下降
-                .Kp = 10, // 10
+                .Kp = 12, // 10
                 .Ki = 0,
                 .Kd = 0,
                 .MaxOut = 200,
@@ -95,7 +95,7 @@ void ShootInit()
             .angle_feedback_source = MOTOR_FEED, .speed_feedback_source = MOTOR_FEED,
             .outer_loop_type = SPEED_LOOP, // 初始化成SPEED_LOOP,让拨盘停在原地,防止拨盘上电时乱转
             .close_loop_type = CURRENT_LOOP | SPEED_LOOP,
-            .motor_reverse_flag = MOTOR_DIRECTION_NORMAL, // 注意方向设置为拨盘的拨出的击发方向
+            .motor_reverse_flag = MOTOR_DIRECTION_REVERSE, // 注意方向设置为拨盘的拨出的击发方向
         },
         .motor_type = M2006 // 英雄使用m3508
     };
@@ -175,16 +175,16 @@ void ShootTask()
         switch (shoot_cmd_recv.bullet_speed)
         {
         case SMALL_AMU_15:
-            DJIMotorSetRef(friction_l, 4000);
-            DJIMotorSetRef(friction_r, 4000);
+            DJIMotorSetRef(friction_l, 27500);
+            DJIMotorSetRef(friction_r, 27500);
             break;
         case SMALL_AMU_18:
-            DJIMotorSetRef(friction_l, 400);
-            DJIMotorSetRef(friction_r, 400);
+            DJIMotorSetRef(friction_l, 35000);
+            DJIMotorSetRef(friction_r, 35000);
             break;
         case SMALL_AMU_30:
-            DJIMotorSetRef(friction_l, 400);
-            DJIMotorSetRef(friction_r, 400);
+            DJIMotorSetRef(friction_l, 25000);
+            DJIMotorSetRef(friction_r, 25000);
             break;
         default: // 当前为了调试设定的默认值4000,因为还没有加入裁判系统无法读取弹速.
             DJIMotorSetRef(friction_l, 0);

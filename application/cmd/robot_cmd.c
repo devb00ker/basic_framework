@@ -92,15 +92,15 @@ static void RemoteControlSet()
     gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
 
     shoot_cmd_send.bullet_speed=SMALL_AMU_15;//default in switch start
-    shoot_cmd_send.shoot_rate=100;//若为0拨弹盘设置为0
+    shoot_cmd_send.shoot_rate=25 ;//若为0拨弹盘设置为0
     //根据实际调整上两参数，调试用
 
     // 遥控器[左]侧开关在[上]，遥控器控制云台
     gimbal_cmd_send.yaw -= 0.005f * (float)rc_data[TEMP].rc.rocker_l_;
     gimbal_cmd_send.pitch -= 0.001f * (float)rc_data[TEMP].rc.rocker_l1;
 
-    chassis_cmd_send.vx = (float)-(50*chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_r_);
-    chassis_cmd_send.vy = (float)(50*chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_r1);
+    chassis_cmd_send.vx = -20*(float)(chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_r_);
+    chassis_cmd_send.vy = -20* (float)(chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_r1);
 
 
     // 遥控器[左]侧开关在[中]，视觉控制云台移动
@@ -209,7 +209,7 @@ static void MouseKeyControlSet()
             {
                 shoot_cmd_send.load_mode = LOAD_1_BULLET;
             }
-            else
+            else//先右键后左键
             {
                 if (vision_recv_data->fire_mode == AUTO_AIM)//自瞄单发  打符||精确射击
                 {
@@ -217,7 +217,7 @@ static void MouseKeyControlSet()
                 }
                 else if (vision_recv_data->fire_mode == AUTO_FIRE)//自瞄连射 长摁
                 {
-                    shoot_cmd_send.load_mode = vision_recv_data->target_state == READY_TO_FIRE ? LOAD_BURSTFIRE : LOAD_STOP;
+                    shoot_cmd_send.load_mode = vision_recv_data->target_state == READY_TO_FIRE ? LOAD_BURSTFIRE : LOAD_STOP;//READY_TO_FIRE来自上位机
                 }
             }
             break;

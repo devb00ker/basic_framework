@@ -74,10 +74,10 @@ typedef struct
     Closeloop_Type_e outer_loop_type;              // 最外层的闭环,未设置时默认为最高级的闭环
     Closeloop_Type_e close_loop_type;              // 使用几个闭环(串级)
     Motor_Reverse_Flag_e motor_reverse_flag;       // 是否反转
-    Feedback_Reverse_Flag_e feedback_reverse_flag; // 反馈是否反向
-    Feedback_Source_e angle_feedback_source;       // 角度反馈类型
+    Feedback_Reverse_Flag_e feedback_reverse_flag; // 反馈是否反向 输出正负
+    Feedback_Source_e angle_feedback_source;       // 角度反馈类型 电机or imu 等
     Feedback_Source_e speed_feedback_source;       // 速度反馈类型
-    Feedfoward_Type_e feedforward_flag;            // 前馈标志
+    Feedfoward_Type_e feedforward_flag;            // 前馈标志？
 
 } Motor_Control_Setting_s;
 
@@ -131,8 +131,8 @@ typedef struct
 {
     Motor_Controller_Init_s controller_param_init_config;
     Motor_Control_Setting_s controller_setting_init_config;
-    Motor_Type_e motor_type;
-    CAN_Init_Config_s can_init_config;
+    Motor_Type_e motor_type;//电机类型
+    CAN_Init_Config_s can_init_config;//can实例
 } Motor_Init_Config_s;
 
 #endif // !MOTOR_DEF_H
