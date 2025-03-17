@@ -57,7 +57,7 @@ static void JudgeReadData(uint8_t *buff)//指针
 				switch (referee_info.CmdID)
 				{
 				case ID_game_state: // 0x0001
-					memcpy(&referee_info.GameState, (buff + DATA_Offset), LEN_game_state);//是否存在大小端？
+					memcpy(&referee_info.GameState, (buff + DATA_Offset), LEN_game_state);//大端模式，传入的时候即为大端，memcpy仅负责传输不负责大小端处理
 					break;
 				case ID_game_result: // 0x0002
 					memcpy(&referee_info.GameResult, (buff + DATA_Offset), LEN_game_result);

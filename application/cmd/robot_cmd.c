@@ -152,7 +152,7 @@ static void MouseKeyControlSet()
 
     // 底盘和云台控制可能需要添加系数
     /************************* chassis&gimbal ************************/
-    chassis_cmd_send.vx = (float)((rc_data[TEMP].key[KEY_PRESS].a - rc_data[TEMP].key[KEY_PRESS].d)*(25*chassis_remote_ratio * 660));
+    chassis_cmd_send.vx = -(float)((rc_data[TEMP].key[KEY_PRESS].a - rc_data[TEMP].key[KEY_PRESS].d)*(25*chassis_remote_ratio * 660));
     chassis_cmd_send.vy = (float)((rc_data[TEMP].key[KEY_PRESS].w - rc_data[TEMP].key[KEY_PRESS].s)*(25*chassis_remote_ratio * 660));
     gimbal_cmd_send.yaw -= (float)rc_data[TEMP].mouse.x * 0.05f;
     gimbal_cmd_send.pitch -= (float)rc_data[TEMP].mouse.y * 0.01f;
