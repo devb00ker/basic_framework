@@ -288,7 +288,7 @@ static void ControlTask()
 static void PublishMessageTask()
 {
     // 设置视觉发送数据,还需增加加速度和角速度数据
-    RefreeSetAltitude(
+    RefereeSetAttribute(
         chassis_fetch_data.current_HP,
         chassis_fetch_data.stage_remain_time,
         chassis_fetch_data.game_progress,
@@ -298,8 +298,8 @@ static void PublishMessageTask()
         chassis_fetch_data.current_base_hp
     );
     VisionSetFlag(chassis_fetch_data.enemy_color, VISION_MODE_AIM, chassis_fetch_data.bullet_speed);
-    SlamSetAltitude(chassis_fetch_data.real_vx, chassis_fetch_data.real_vy, gimbal_fetch_data.gimbal_imu_data.Gyro[2]);
-    VisionSetAltitude(gimbal_cmd_send.yaw, -gimbal_cmd_send.pitch, 0.0f, 1.0f);
+    SlamSetAttribute(chassis_fetch_data.real_vx, chassis_fetch_data.real_vy, gimbal_fetch_data.gimbal_imu_data.Gyro[2]);
+    VisionSetAttribute(gimbal_cmd_send.yaw, -gimbal_cmd_send.pitch, 0.0f, 1.0f);
 
     PubPushMessage(chassis_cmd_pub, (void*)&chassis_cmd_send);
     PubPushMessage(shoot_cmd_pub, (void*)&shoot_cmd_send);

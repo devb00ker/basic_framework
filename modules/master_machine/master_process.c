@@ -25,7 +25,7 @@ void VisionSetFlag(Enemy_Color_e enemy_color, Work_Mode_e work_mode, Bullet_Spee
     send_data.bullet_speed = bullet_speed;
 }
 
-void VisionSetAltitude(float yaw, float pitch, float roll, float GimbalSend)
+void VisionSetAttribute(float yaw, float pitch, float roll, float GimbalSend)
 {
     send_data.yaw = yaw;
     send_data.pitch = pitch;
@@ -33,14 +33,14 @@ void VisionSetAltitude(float yaw, float pitch, float roll, float GimbalSend)
     send_data.gimbal_send = GimbalSend;
 }
 
-void SlamSetAltitude(float x, float y, float gimbal_angle)
+void SlamSetAttribute(float x, float y, float gimbal_angle)
 {
     send_data.vel_x = x;
     send_data.vel_y = y;
     send_data.gimabl_angle = gimbal_angle;
 }
 
-void RefreeSetAltitude(float current_HP, float stage_remain_time, float game_progress, float enemy_sentry_HP,
+void RefereeSetAttribute(float current_HP, float stage_remain_time, float game_progress, float enemy_sentry_HP,
                        float enemy_base_HP, float shield_HP, float current_base_HP)
 {
     send_data.current_HP = current_HP;

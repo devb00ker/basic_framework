@@ -75,6 +75,7 @@ typedef enum
 
 typedef struct
 {
+    //机器人相关参数与对局信息
     Enemy_Color_e enemy_color;
     Work_Mode_e work_mode;
     Bullet_Speed_e bullet_speed;
@@ -86,6 +87,7 @@ typedef struct
     float vel_y;
     float gimabl_angle;
     float gimbal_send;
+    //从裁判系统获取
     float game_progress;
     float stage_remain_time;
     float current_HP;
@@ -109,7 +111,7 @@ Vision_Recv_s* VisionInit(UART_HandleTypeDef* _handle);
  */
 void VisionSend();
 
-void SlamSetAltitude(float x, float y, float gimabl_angle);
+void SlamSetAttribute(float x, float y, float gimabl_angle);//当前机器人的运动信息
 
 /**
  * @brief 设置视觉发送标志位
@@ -118,7 +120,7 @@ void SlamSetAltitude(float x, float y, float gimabl_angle);
  * @param work_mode
  * @param bullet_speed
  */
-void VisionSetFlag(Enemy_Color_e enemy_color, Work_Mode_e work_mode, Bullet_Speed_e bullet_speed);
+void VisionSetFlag(Enemy_Color_e enemy_color, Work_Mode_e work_mode, Bullet_Speed_e bullet_speed);//对局信息与机器人参数
 
 /**
  * @brief 设置发送数据的姿态部分
@@ -126,9 +128,9 @@ void VisionSetFlag(Enemy_Color_e enemy_color, Work_Mode_e work_mode, Bullet_Spee
  * @param yaw
  * @param pitch
  */
-void VisionSetAltitude(float yaw, float pitch, float roll, float GimbalSend);
+void VisionSetAttribute(float yaw, float pitch, float roll, float GimbalSend);//当前机器人位姿
 
-void RefreeSetAltitude(float current_HP, float stage_remain_time, float game_progress, float enemy_sentry_HP,
-                       float enemy_base_HP, float shield_HP, float current_base_HP);
+void RefereeSetAttribute(float current_HP, float stage_remain_time, float game_progress, float enemy_sentry_HP,
+                       float enemy_base_HP, float shield_HP, float current_base_HP); //裁判系统数据
 
 #endif // !MASTER_PROCESS_H

@@ -9,12 +9,12 @@
 
 typedef struct {
     struct {
-        uint8_t sof;
-        uint16_t data_length;
-        uint8_t crc_check; // 帧头CRC校验
-    } header;               // 数据帧头
-    uint16_t cmd_id;       // 数据ID
-    uint16_t frame_tail;   // 帧尾CRC校验
+        uint8_t sof;//1
+        uint16_t data_length;//2
+        uint8_t crc_check; // 帧头CRC校验 1
+    } header;               // 数据帧头 4b
+    uint16_t cmd_id;       // 数据ID 2b
+    uint16_t frame_tail;   // 帧尾CRC校验 2b
 } protocol_rm_struct;
 
 /*设置寄存器*/

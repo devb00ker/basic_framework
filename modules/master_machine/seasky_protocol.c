@@ -15,13 +15,13 @@
 #include "crc16.h"
 #include "memory.h"
 
-/*获取CRC8校验码*/
+/*获取CRC8校验码*///生成对应的CRC校验码
 uint8_t Get_CRC8_Check(uint8_t* pchMessage, uint16_t dwLength)
 {
     return crc_8(pchMessage, dwLength);
 }
 
-/*检验CRC8数据段*/
+/*检验CRC8数据段*///校验CRC码是否正确
 static uint8_t CRC8_Check_Sum(uint8_t* pchMessage, uint16_t dwLength)
 {
     uint8_t ucExpected = 0;
@@ -70,13 +70,13 @@ static uint8_t protocol_heade_Check(protocol_rm_struct* pro, uint8_t* rx_buf)
 /*
  * simple code to set flags register
  */
-void set_flag_register(uint16_t* flags_register, const uint8_t* flags, uint8_t flags_length)
+void set_flag_register(uint16_t* flags_register, const uint8_t* flags, uint8_t flags_length)//flags_length字节数
 {
     *flags_register = 0;
 
     for (uint8_t i = 0; i < flags_length && i < 4; i++)
     {
-        *flags_register = (*flags_register << 4) | (flags[i] & 0xff);
+        *flags_register = (*flags_register << 4) | (flags[i] & 0xff);//先解引用在左移 16位 被分为每4位一个单位
     }
 }
 
@@ -106,7 +106,7 @@ void get_protocol_send_data(uint16_t send_id, // 信号id
     static uint16_t crc16;
     static uint16_t data_len;
 
-    data_len = float_length * 4 + 2;
+    data_len = float_length * 4 + 2;//float 4b
     /*帧头部分*/
     tx_buf[0] = PROTOCOL_CMD_ID;
     tx_buf[1] = data_len & 0xff; // 低位在前
