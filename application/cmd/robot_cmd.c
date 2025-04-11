@@ -96,11 +96,11 @@ static void RemoteControlSet()
     //根据实际调整上两参数，调试用
 
     // 遥控器[左]侧开关在[上]，遥控器控制云台
-    gimbal_cmd_send.yaw -= 0.005f * (float)rc_data[TEMP].rc.rocker_l_;
-    gimbal_cmd_send.pitch -= 0.001f * (float)rc_data[TEMP].rc.rocker_l1;
-
-    chassis_cmd_send.vx = -20*(float)(chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_r_);
-    chassis_cmd_send.vy = -20* (float)(chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_r1);
+    gimbal_cmd_send.yaw -= 0.012f * (float) chassis_cmd_send.offset_angle;
+//    gimbal_cmd_send.pitch -= 0.001f * (float)rc_data[TEMP].rc.rocker_l1;
+    chassis_cmd_send.wz = -0.1f*(float)rc_data[TEMP].rc.rocker_l_;
+    chassis_cmd_send.vx = -0.03f*(float)(chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_r_);
+    chassis_cmd_send.vy = -0.03f* (float)(chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_r1);
 
 
     // 遥控器[左]侧开关在[中]，视觉控制云台移动
