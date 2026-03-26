@@ -96,8 +96,8 @@ static void RemoteControlSet()
     //根据实际调整上两参数，调试用
 
     // 遥控器[左]侧开关在[上]，遥控器控制云台
-    gimbal_cmd_send.yaw -= 0.005f * (float)rc_data[TEMP].rc.rocker_l_;
-    gimbal_cmd_send.pitch -= 0.001f * (float)rc_data[TEMP].rc.rocker_l1;
+    gimbal_cmd_send.yaw -= 0.007f * (float)rc_data[TEMP].rc.rocker_l_;
+    gimbal_cmd_send.pitch -= 0.01f * (float)rc_data[TEMP].rc.rocker_l1;
 
     chassis_cmd_send.vx = -20*(float)(chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_r_);
     chassis_cmd_send.vy = -20* (float)(chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_r1);
@@ -106,6 +106,7 @@ static void RemoteControlSet()
     // 遥控器[左]侧开关在[中]，视觉控制云台移动
     if (switch_is_mid(rc_data[TEMP].rc.switch_left)||switch_is_down(rc_data[TEMP].rc.switch_left))
     {
+        shoot_cmd_send.friction_mode = FRICTION_ON;//开摩擦轮
         if (vision_recv_data->target_state != NO_TARGET)
         {
             // 存在目标时视觉控制云台移动
@@ -116,7 +117,6 @@ static void RemoteControlSet()
         {
             // 开！
             shoot_cmd_send.shoot_mode= SHOOT_ON;
-            shoot_cmd_send.friction_mode = FRICTION_ON;
             shoot_cmd_send.load_mode = LOAD_BURSTFIRE;
 
         }
@@ -128,12 +128,14 @@ static void RemoteControlSet()
             shoot_cmd_send.load_mode = LOAD_STOP;
             shoot_cmd_send.shoot_mode= SHOOT_OFF;
         }
-        if(rc_data[TEMP].rc.dial>400||rc_data[TEMP].rc.dial<-400){
-            chassis_cmd_send.chassis_mode = CHASSIS_ROTATE;
-        }
-        else {
-            chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
-        }
+
+    }
+
+    if(rc_data[TEMP].rc.dial>400||rc_data[TEMP].rc.dial<-400){
+        chassis_cmd_send.chassis_mode = CHASSIS_ROTATE;
+    }
+    else {
+        chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
     }
 }
 

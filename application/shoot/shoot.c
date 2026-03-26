@@ -8,7 +8,7 @@
 
 /* 对于双发射机构的机器人,将下面的数据封装成结构体即可,生成两份shoot应用实例 */
 static DJIMotorInstance *friction_l, *friction_r, *loader; // 拨盘电机
-// static servo_instance *lid; 需要增加弹舱盖
+// static servo_instance *lid; 需要增加弹舱盖+
 
 static Publisher_t* shoot_pub;
 static Shoot_Ctrl_Cmd_s shoot_cmd_recv; // 来自cmd的发射控制信息
