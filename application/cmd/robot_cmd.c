@@ -85,6 +85,7 @@ static void CalcOffsetAngle()
  * @brief 控制输入为遥控器(调试时)的模式和控制量设置
  *
  */
+
 static void RemoteControlSet()
 {
     // 云台参数, 遥控器[左]侧开关确定云台控制数据 **********周期执行该函数 只可将初始状态放这**********
@@ -96,11 +97,10 @@ static void RemoteControlSet()
     //根据实际调整上两参数，调试用
 
     // 遥控器[左]侧开关在[上]，遥控器控制云台
-    gimbal_cmd_send.yaw -= 0.005f * (float)rc_data[TEMP].rc.rocker_l_;
-    gimbal_cmd_send.pitch -= 0.001f * (float)rc_data[TEMP].rc.rocker_l1;
-
-    chassis_cmd_send.vx = (float)-(50*chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_r_);
-    chassis_cmd_send.vy = (float)(50*chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_r1);
+    gimbal_cmd_send.yaw -= 0.05f * (float)rc_data[TEMP].rc.rocker_l_;
+    gimbal_cmd_send.pitch -= 0.01f * (float)rc_data[TEMP].rc.rocker_l1;
+    chassis_cmd_send.vx = (float)-((500.0f)*chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_r_);
+    chassis_cmd_send.vy = (float)((500.0f)*chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_r1);
 
 
     // 遥控器[左]侧开关在[中]，视觉控制云台移动

@@ -26,9 +26,9 @@ void GimbalInit()
         },
         .controller_param_init_config = {
             .angle_PID = {
-                .Kp = 6, // 8
-                .Ki = 0.5,
-                .Kd = 0.5,
+                .Kp = 1, // 8
+                .Ki = 0,
+                .Kd = 0,
                 .DeadBand = 0.1,
                 .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
                 .IntegralLimit = 100,
@@ -36,8 +36,8 @@ void GimbalInit()
                 .MaxOut = 500,
             },
             .speed_PID = {
-                .Kp = 150, // 50
-                .Ki = 1, // 200
+                .Kp = 1, // 50
+                .Ki = 0, // 200
                 .Kd = 0,
                 .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
                 .IntegralLimit = 3000,
@@ -64,7 +64,7 @@ void GimbalInit()
         },
         .controller_param_init_config = {
             .angle_PID = {
-                .Kp = 4, // 10
+                .Kp = 1, // 10
                 .Ki = 0,
                 .Kd = 0,
                 .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
@@ -72,7 +72,7 @@ void GimbalInit()
                 .MaxOut = 500,
             },
             .speed_PID = {
-                .Kp = 120, // 50
+                .Kp = 1, // 50
                 .Ki = 0, // 350
                 .Kd = 0, // 0
                 .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
@@ -135,7 +135,7 @@ void GimbalTask()
     // 设置反馈数据,主要是imu和yaw的ecd
     gimbal_feedback_data.gimbal_imu_data = *gimba_IMU_data;
     gimbal_feedback_data.yaw_motor_single_round_angle = yaw_motor->measure.angle_single_round;
-
+    gimbal_feedback_data.pitch_motor_single_round_angle = pitch_motor->measure.angle_single_round;
     // 推送消息
     PubPushMessage(gimbal_pub, (void*)&gimbal_feedback_data);
 }
