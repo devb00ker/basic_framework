@@ -26,7 +26,7 @@ void GimbalInit()
         },
         .controller_param_init_config = {
             .angle_PID = {
-                .Kp = 1, // 8
+                .Kp = 6, // 8
                 .Ki = 0,
                 .Kd = 0,
                 .DeadBand = 0.1,
@@ -36,7 +36,7 @@ void GimbalInit()
                 .MaxOut = 500,
             },
             .speed_PID = {
-                .Kp = 1, // 50
+                .Kp = 150, // 50
                 .Ki = 0, // 200
                 .Kd = 0,
                 .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
@@ -64,7 +64,7 @@ void GimbalInit()
         },
         .controller_param_init_config = {
             .angle_PID = {
-                .Kp = 1, // 10
+                .Kp = 4, // 10
                 .Ki = 0,
                 .Kd = 0,
                 .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
@@ -72,7 +72,7 @@ void GimbalInit()
                 .MaxOut = 500,
             },
             .speed_PID = {
-                .Kp = 1, // 50
+                .Kp = 120, // 50
                 .Ki = 0, // 350
                 .Kd = 0, // 0
                 .Improve = PID_Trapezoid_Intergral | PID_Integral_Limit | PID_Derivative_On_Measurement,
