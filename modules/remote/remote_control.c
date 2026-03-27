@@ -34,62 +34,101 @@ static void RectifyRCjoystick()
  */
 static void sbus_to_rc(const uint8_t* sbus_buf)
 {
-    // 摇杆,直接解算时减去偏置
-    rc_ctrl[TEMP].rc.rocker_r_ = ((sbus_buf[0] | (sbus_buf[1] << 8)) & 0x07ff) - RC_CH_VALUE_OFFSET; //!< Channel 0
+    //=====================================================
+    // 1. 摇杆通道数据解析 + 中心点偏移校正
+    //=====================================================
+    // 右水平摇杆 & 右竖直摇杆
+    rc_ctrl[TEMP].rc.rocker_r_ = ((sbus_buf[0] | (sbus_buf[1] << 8)) & 0x07ff) - RC_CH_VALUE_OFFSET;
     rc_ctrl[TEMP].rc.rocker_r1 = (((sbus_buf[1] >> 3) | (sbus_buf[2] << 5)) & 0x07ff) - RC_CH_VALUE_OFFSET;
-    //!< Channel 1
+
+    // 左水平摇杆 & 左竖直摇杆
     rc_ctrl[TEMP].rc.rocker_l_ = (((sbus_buf[2] >> 6) | (sbus_buf[3] << 2) | (sbus_buf[4] << 10)) & 0x07ff) -
-        RC_CH_VALUE_OFFSET; //!< Channel 2
+        RC_CH_VALUE_OFFSET;
     rc_ctrl[TEMP].rc.rocker_l1 = (((sbus_buf[4] >> 1) | (sbus_buf[5] << 7)) & 0x07ff) - RC_CH_VALUE_OFFSET;
-    //!< Channel 3
-    rc_ctrl[TEMP].rc.dial = ((sbus_buf[16] | (sbus_buf[17] << 8)) & 0x07FF) - RC_CH_VALUE_OFFSET; // 左侧拨轮
+
+    // 侧边拨动旋钮解析
+    rc_ctrl[TEMP].rc.dial = ((sbus_buf[16] | (sbus_buf[17] << 8)) & 0x07FF) - RC_CH_VALUE_OFFSET;
+
+    // 摇杆非线性/死区校正统一处理
     RectifyRCjoystick();
-    // 开关,0左1右
-    rc_ctrl[TEMP].rc.switch_right = ((sbus_buf[5] >> 4) & 0x0003); //!< Switch right
-    rc_ctrl[TEMP].rc.switch_left = ((sbus_buf[5] >> 4) & 0x000C) >> 2; //!< Switch left
 
-    // 鼠标解析
-    rc_ctrl[TEMP].mouse.x = (sbus_buf[6] | (sbus_buf[7] << 8)); //!< Mouse X axis
-    rc_ctrl[TEMP].mouse.y = (sbus_buf[8] | (sbus_buf[9] << 8)); //!< Mouse Y axis
-    rc_ctrl[TEMP].mouse.press_l = sbus_buf[12]; //!< Mouse Left Is Press ?
-    rc_ctrl[TEMP].mouse.press_r = sbus_buf[13]; //!< Mouse Right Is Press ?
+    //=====================================================
+    // 2. 物理拨码开关解析 (左右两路开关量)
+    //=====================================================
+    rc_ctrl[TEMP].rc.switch_right = ((sbus_buf[5] >> 4) & 0x0003);       // 右侧2位开关
+    rc_ctrl[TEMP].rc.switch_left  = ((sbus_buf[5] >> 4) & 0x000C) >> 2;  // 左侧2位开关
 
-    //  位域的按键值解算,直接memcpy即可,注意小端低字节在前,即lsb在第一位,msb在最后
+    //=====================================================
+    // 3. 鼠标坐标轴 + 鼠标按键解析
+    //=====================================================
+    rc_ctrl[TEMP].mouse.x      = (sbus_buf[6] | (sbus_buf[7] << 8));   // 鼠标X左右轴
+    rc_ctrl[TEMP].mouse.y      = (sbus_buf[8] | (sbus_buf[9] << 8));   // 鼠标Y前后轴
+    rc_ctrl[TEMP].mouse.press_l= sbus_buf[12];                         // 鼠标左键按压标志
+    rc_ctrl[TEMP].mouse.press_r= sbus_buf[13];                         // 鼠标右键按压标志
+
+    //=====================================================
+    // 4. 位域按键整体赋值 (16位原始按键打包)
+    // 利用Union直接整体映射,无需逐位判断,节省开销
+    //=====================================================
     *(uint16_t*)&rc_ctrl[TEMP].key[KEY_PRESS] = (uint16_t)(sbus_buf[14] | (sbus_buf[15] << 8));
-    if (rc_ctrl[TEMP].key[KEY_PRESS].ctrl) // ctrl键按下，则将当前遥控器数据按键相关更新至KEY_PRESS_WITH_CTRL 否则清零 下同
+
+    //=====================================================
+    // 5. Ctrl组合按键状态筛选 & 清空逻辑
+    //=====================================================
+    if (rc_ctrl[TEMP].key[KEY_PRESS].ctrl)
         rc_ctrl[TEMP].key[KEY_PRESS_WITH_CTRL] = rc_ctrl[TEMP].key[KEY_PRESS];
     else
+        // 无Ctrl按下:整组Key_t内存清零,防止残留旧状态
         memset(&rc_ctrl[TEMP].key[KEY_PRESS_WITH_CTRL], 0, sizeof(Key_t));
-    if (rc_ctrl[TEMP].key[KEY_PRESS].shift) // shift键按下
+
+    //=====================================================
+    // 6. Shift组合按键状态筛选 & 清空逻辑
+    //=====================================================
+    if (rc_ctrl[TEMP].key[KEY_PRESS].shift)
         rc_ctrl[TEMP].key[KEY_PRESS_WITH_SHIFT] = rc_ctrl[TEMP].key[KEY_PRESS];
     else
+        // 无Shift按下:整组Key_t内存清零
         memset(&rc_ctrl[TEMP].key[KEY_PRESS_WITH_SHIFT], 0, sizeof(Key_t));
 
-    uint16_t key_now = rc_ctrl[TEMP].key[KEY_PRESS].keys, // 当前按键是否按下
-             key_last = rc_ctrl[LAST].key[KEY_PRESS].keys, // 上一次按键是否按下
-             key_with_ctrl = rc_ctrl[TEMP].key[KEY_PRESS_WITH_CTRL].keys, // 当前ctrl组合键是否按下
-             key_with_shift = rc_ctrl[TEMP].key[KEY_PRESS_WITH_SHIFT].keys, //  当前shift组合键是否按下
-             key_last_with_ctrl = rc_ctrl[LAST].key[KEY_PRESS_WITH_CTRL].keys, // 上一次ctrl组合键是否按下
-             key_last_with_shift = rc_ctrl[LAST].key[KEY_PRESS_WITH_SHIFT].keys; // 上一次shift组合键是否按下
+    //=====================================================
+    // 7. 提取当前/上一帧所有按键组原始16位数值
+    // 统一缓存,减少重复寻址,提升执行效率
+    //=====================================================
+    uint16_t key_now        = rc_ctrl[TEMP].key[KEY_PRESS].keys;
+    uint16_t key_last       = rc_ctrl[LAST].key[KEY_PRESS].keys;
+    uint16_t key_with_ctrl  = rc_ctrl[TEMP].key[KEY_PRESS_WITH_CTRL].keys;
+    uint16_t key_last_ctrl  = rc_ctrl[LAST].key[KEY_PRESS_WITH_CTRL].keys;
+    uint16_t key_with_shift = rc_ctrl[TEMP].key[KEY_PRESS_WITH_SHIFT].keys;
+    uint16_t key_last_shift = rc_ctrl[LAST].key[KEY_PRESS_WITH_SHIFT].keys;
 
-    for (uint16_t i = 0, j = 0x1; i < 16; j <<= 1, i++)//位运算遍历key 数组 每一位
+    //=====================================================
+    // 8. 逐位遍历16个按键 + 上升沿判定 + key_count计数
+    // key_count[3][16]: [模式组][按键序号] 记录单次有效按下次数
+    // 跳过bit4(shift) bit5(ctrl)本身,只统计功能按键
+    //=====================================================
+    for (uint16_t i = 0, j = 0x1; i < 16; j <<= 1, i++)
     {
-        if (i == 4 || i == 5) // 4,5位为ctrl和shift,直接跳过
+        if (i == 4 || i == 5)
             continue;
-        // 如果当前按键按下,上一次按键没有按下,且ctrl和shift组合键没有按下,则按键按下计数加1(检测到上升沿)
+
+        // 普通按键上升沿计数(无Ctrl/Shift叠加)
         if ((key_now & j) && !(key_last & j) && !(key_with_ctrl & j) && !(key_with_shift & j))
             rc_ctrl[TEMP].key_count[KEY_PRESS][i]++;
-        // 当前ctrl组合键按下,上一次ctrl组合键没有按下,则ctrl组合键按下计数加1(检测到上升沿)
-        if ((key_with_ctrl & j) && !(key_last_with_ctrl & j))
+
+        // Ctrl组合键上升沿独立计数
+        if ((key_with_ctrl & j) && !(key_last_ctrl & j))
             rc_ctrl[TEMP].key_count[KEY_PRESS_WITH_CTRL][i]++;
-        // 当前shift组合键按下,上一次shift组合键没有按下,则shift组合键按下计数加1(检测到上升沿)
-        if ((key_with_shift & j) && !(key_last_with_shift & j))
+
+        // Shift组合键上升沿独立计数
+        if ((key_with_shift & j) && !(key_last_shift & j))
             rc_ctrl[TEMP].key_count[KEY_PRESS_WITH_SHIFT][i]++;
     }
 
-    memcpy(&rc_ctrl[LAST], &rc_ctrl[TEMP], sizeof(RC_ctrl_t)); // 保存上一次的数据,用于按键持续按下和切换的判断
+    //=====================================================
+    // 9. 帧备份:当前帧存入历史帧,供下一帧边沿对比
+    //=====================================================
+    memcpy(&rc_ctrl[LAST], &rc_ctrl[TEMP], sizeof(RC_ctrl_t));
 }
-
 /**
  * @brief 对sbus_to_rc的简单封装,用于注册到bsp_usart的回调函数中
  *
