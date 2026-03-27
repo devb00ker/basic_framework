@@ -41,12 +41,21 @@
 #define switch_is_mid(s) (s == RC_SW_MID)
 #define switch_is_up(s) (s == RC_SW_UP)
 
+// referee system
+// Gear
+#define REFEREE_GEAR_C 0
+#define REFEREE_GEAR_S 1
+#define REFEREE_GEAR_N 2
+//Button
+#define HAVEN_PRRESSED 1
+#define UNHAVEN_PRRESSED 0
+
 /* ----------------------- PC Key Definition-------------------------------- */
 // 对应key[x][0~16],获取对应的键;例如通过key[KEY_PRESS][Key_W]获取W键是否按下,后续改为位域后删除
 #define Key_W 0
 #define Key_S 1
-#define Key_D 2
-#define Key_A 3
+#define Key_A 2
+#define Key_D 3
 #define Key_Shift 4
 #define Key_Ctrl 5
 #define Key_Q 6
@@ -129,5 +138,37 @@ RC_ctrl_t *RemoteControlInit(UART_HandleTypeDef *rc_usart_handle);
  * @return uint8_t 1:在线 0:离线
  */
 uint8_t RemoteControlIsOnline();
+/* -------------------------  RefereeControl  -----------------------------------*/
+typedef struct
+{
+    struct
+    {
+        int16_t rocker_r_;              //  右水平通 通道0
+        int16_t rocker_r1;              //  右竖直 通道1
+        int16_t rocker_l_;              //  左水平 通道2
+        int16_t rocker_l1;              //  左竖直 通道3
+        uint8_t switch_gear;            //  C:0 N:1 S:2
+        uint8_t pause_press;            //  暂停按键
+        uint8_t custom_button_left;     //  自定义按键 左
+        uint8_t custom_button_right;    //  自定义按键 右
+        int16_t dial;                   //  拨轮
+        uint8_t trigger_button;         //  扳机键
+    } rc;
+    struct
+    {
+        int16_t x;                      //左右
+        int16_t y;                      //前后
+        int16_t z;                      //滚轮
+        uint8_t press_l;                //左
+        uint8_t press_r;                //右
+        uint8_t press_mid;              //中
+    } mouse;
+    Key_t key[3]; // 改为位域后的键盘索引,空间减少8倍  ,速度增加16~倍
+
+    uint8_t key_count[3][16];
+} RC_Referee_ctrl_t;
+
+RC_Referee_ctrl_t *RemoteControl_Referee_Init(UART_HandleTypeDef *rc_usart_handle);
+uint8_t RemoteControl_Referee_IsOnline();
 
 #endif
