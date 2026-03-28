@@ -101,7 +101,7 @@ typedef struct
  *
  * @param handle 用于和视觉通信的串口handle(C板上一般为USART1,丝印为USART2,4pin)
  */
-Vision_Recv_s* VisionInit(UART_HandleTypeDef* _handle);
+Vision_Recv_s* VisionInit();
 
 /**
  * @brief 发送视觉数据

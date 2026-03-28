@@ -145,9 +145,9 @@ static void DecodeVision(uint16_t recv_len)
 }
 
 /* 视觉通信初始化 */
-Vision_Recv_s* VisionInit(UART_HandleTypeDef* _handle)
+Vision_Recv_s* VisionInit()
 {
-    UNUSED(_handle); // 仅为了消除警告
+
     USB_Init_Config_s conf = {.rx_cbk = DecodeVision};
     vis_recv_buff = USBInit(conf);
 
