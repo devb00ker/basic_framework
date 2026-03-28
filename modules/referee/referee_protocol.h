@@ -411,182 +411,157 @@ typedef struct {
 	uint16_t reserved;          // 保留位
 } custom_client_data_t;
 
-/****************************机器人交互数据****************************/
-/****************************机器人交互数据****************************/
-/* 发送的内容数据段最大为 112 检测是否超出大小限制?实际上图形段不会超，数据段最多30个，也不会超//0x0200~0x02FF */
-/* 交互数据头结构 */
-/* ID: 0x0301  Byte:  6+ Communicate_Data_LEN    机器人间交互数据 */
-typedef struct
-{
-	uint16_t data_cmd_id; // 由于存在多个内容 ID，但整个cmd_id 上行频率最大为 10Hz，请合理安排带宽。注意交互部分的上行频率
-	uint16_t sender_ID;
-	uint16_t receiver_ID;
-    //uint8_t user_data[Communicate_Data_LEN]; 自定义数据
-} ext_robot_interaction_data_t;
-/* 机器人id */
-typedef enum
-{
-	// 红方机器人ID
-	RobotID_RHero = 1,
-	RobotID_REngineer = 2,
-	RobotID_RStandard1 = 3,
-	RobotID_RStandard2 = 4,
-	RobotID_RStandard3 = 5,
-	RobotID_RAerial = 6,
-	RobotID_RSentry = 7,
-    RobotID_Rdart =8,
-	RobotID_RRadar = 9,
-	// 蓝方机器人ID
-	RobotID_BHero = 101,
-	RobotID_BEngineer = 102,
-	RobotID_BStandard1 = 103,
-	RobotID_BStandard2 = 104,
-	RobotID_BStandard3 = 105,
-	RobotID_BAerial = 106,
-	RobotID_BSentry = 107,
-    RobotID_Bdart =108,
-	RobotID_BRadar = 109,
-} Robot_ID_e;
+// /=========================================================
+// 【3. 雷达无线链路结构体】（裁判系统信号发射源发送，雷达接收解析）
+// =========================================================
+// 对方机器人位置坐标（0x0A01）- 固定10Hz，信号发射源→雷达
+typedef struct {
+    uint16_t opponent_hero_x;   // 对方英雄x坐标（cm）
+    uint16_t opponent_hero_y;   // 对方英雄y坐标（cm）
+    uint16_t opponent_engineer_x; // 对方工程x坐标（cm）
+    uint16_t opponent_engineer_y; // 对方工程y坐标（cm）
+    uint16_t opponent_infantry_3_x; // 对方3号步兵x坐标（cm）
+    uint16_t opponent_infantry_3_y; // 对方3号步兵y坐标（cm）
+    uint16_t opponent_infantry_4_x; // 对方4号步兵x坐标（cm）
+    uint16_t opponent_infantry_4_y; // 对方4号步兵y坐标（cm）
+    uint16_t opponent_aerial_x; // 对方空中机器人x坐标（cm）
+    uint16_t opponent_aerial_y; // 对方空中机器人y坐标（cm）
+    uint16_t opponent_sentry_x; // 对方哨兵x坐标（cm）
+    uint16_t opponent_sentry_y; // 对方哨兵y坐标（cm）
+} radar_opponent_position_t;
 
-/* 交互数据ID */
-typedef enum
-{
-	UI_Data_ID_Del = 0x100,
-	UI_Data_ID_Draw1 = 0x101,
-	UI_Data_ID_Draw2 = 0x102,
-	UI_Data_ID_Draw5 = 0x103,
-	UI_Data_ID_Draw7 = 0x104,
-	UI_Data_ID_DrawChar = 0x110,
-    UI_Data_ID_sentry=0x120,
-    UI_Data_ID_radar=0x121,
-	/* 自定义交互数据部分 */
-	Communicate_Data_ID = 0x0200,//0x0200~0x02FF
+// 对方机器人血量信息（0x0A02）- 固定10Hz，信号发射源→雷达
+typedef struct {
+    uint16_t opponent_1_hero_HP; // 对方1号英雄血量
+    uint16_t opponent_2_engineer_HP; // 对方2号工程血量
+    uint16_t opponent_3_infantry_HP; // 对方3号步兵血量
+    uint16_t opponent_4_infantry_HP; // 对方4号步兵血量
+    uint16_t reserved;          // 保留位
+    uint16_t opponent_7_sentry_HP; // 对方7号哨兵血量
+} radar_opponent_hp_t;
 
-} Interactive_Data_ID_e;
-/* 交互数据长度 */
-typedef enum
-{
-	Interactive_Data_LEN_Head = 6,
-	UI_Operate_LEN_Del = 2,
-	UI_Operate_LEN_PerDraw = 15,
-	UI_Operate_LEN_DrawChar = 15 + 30,
-    UI_Operate_LEN_Decision_sentry=4,
-    UI_Operate_LEN_Decision_radar=1,
-	/* 自定义交互数据部分 */
-	 //Communicate_Data_LEN = 5,//自定义0x0200~0x02FF
+// 对方机器人剩余发弹量（0x0A03）- 固定10Hz，信号发射源→雷达
+typedef struct {
+    uint16_t opponent_1_hero_ammo; // 对方1号英雄允许发弹量
+    uint16_t opponent_3_infantry_ammo; // 对方3号步兵允许发弹量
+    uint16_t opponent_4_infantry_ammo; // 对方4号步兵允许发弹量
+    uint16_t opponent_6_aerial_ammo; // 对方6号空中机器人允许发弹量
+    uint16_t opponent_7_sentry_ammo; // 对方7号哨兵允许发弹量
+} radar_opponent_ammo_t;
 
-} Interactive_Data_Length_e;
+// 对方队伍宏观状态（0x0A04）- 固定10Hz，信号发射源→雷达
+typedef struct {
+    uint16_t opponent_remaining_gold; // 对方剩余金币数
+    uint16_t opponent_total_gold;     // 对方累计总金币数
+    uint32_t opponent_state_bitfield; // 对方占领/检测状态bit域（32位）
+} radar_opponent_global_state_t;
 
-/****************************自定义交互数据****************************/
-/*
-	学生机器人间通信 cmd_id 0x0301，内容 ID:0x0200~0x02FF
-	自定义交互数据 机器人间通信：0x0301。
-	发送频率：上限 10Hz
-*/
-// 自定义交互数据协议，可更改，更改后需要修改最上方宏定义数据长度的值
-typedef struct
-{
-	uint8_t data[Communicate_Data_LEN]; // 数据段,n需要小于113
-} robot_interactive_data_t;
+// 对方机器人增益效果（0x0A05）- 固定10Hz，信号发射源→雷达
+typedef struct {
+    // 对方英雄增益
+    uint8_t opponent_hero_recovery;   // 回血增益（百分比）
+    uint16_t opponent_hero_cooling;   // 热量冷却增益（x/s）
+    uint8_t opponent_hero_defence;    // 防御增益（百分比）
+    uint8_t opponent_hero_vulnerability; // 负防御增益（百分比）
+    uint16_t opponent_hero_attack;    // 攻击增益（百分比）
+    // 对方工程增益
+    uint8_t opponent_engineer_recovery; // 回血增益（百分比）
+    uint16_t opponent_engineer_cooling; // 热量冷却增益（x/s）
+    uint8_t opponent_engineer_defence; // 防御增益（百分比）
+    uint8_t opponent_engineer_vulnerability; // 负防御增益（百分比）
+    uint16_t opponent_engineer_attack; // 攻击增益（百分比）
+    // 对方3号步兵增益
+    uint8_t opponent_infantry3_recovery; // 回血增益（百分比）
+    uint16_t opponent_infantry3_cooling; // 热量冷却增益（x/s）
+    uint8_t opponent_infantry3_defence; // 防御增益（百分比）
+    uint8_t opponent_infantry3_vulnerability; // 负防御增益（百分比）
+    uint16_t opponent_infantry3_attack; // 攻击增益（百分比）
+    // 对方4号步兵增益
+    uint8_t opponent_infantry4_recovery; // 回血增益（百分比）
+    uint16_t opponent_infantry4_cooling; // 热量冷却增益（x/s）
+    uint8_t opponent_infantry4_defence; // 防御增益（百分比）
+    uint8_t opponent_infantry4_vulnerability; // 负防御增益（百分比）
+    uint16_t opponent_infantry4_attack; // 攻击增益（百分比）
+    // 对方哨兵增益
+    uint8_t opponent_sentry_recovery; // 回血增益（百分比）
+    uint16_t opponent_sentry_cooling; // 热量冷却增益（x/s）
+    uint8_t opponent_sentry_defence; // 防御增益（百分比）
+    uint8_t opponent_sentry_vulnerability; // 负防御增益（百分比）
+    uint16_t opponent_sentry_attack; // 攻击增益（百分比）
+    uint8_t opponent_sentry_posture; // 哨兵姿态（1=进攻 2=防御 3=移动）
+} radar_opponent_buff_t;
 
-// 机器人交互信息_发送
-typedef struct
-{
-	xFrameHeader FrameHeader;
-	uint16_t CmdID;
-	ext_robot_interaction_data_t datahead;
-	robot_interactive_data_t Data; // 数据段
-	uint16_t frametail;
-} Communicate_SendData_t;
-// 机器人交互信息_接收
-typedef struct
-{
-	ext_robot_interaction_data_t datahead;
-	robot_interactive_data_t Data; // 数据段
-} Communicate_ReceiveData_t;
+// 对方干扰波密钥（0x0A06）- 固定10Hz，信号发射源→雷达
+typedef struct {
+    uint8_t password[6];        // 密钥（6字节，ASCII字母/数字）
+} radar_opponent_password_t;
 
-/****************************UI交互数据****************************/
+// /=========================================================
+// 【4. UI绘制相关结构体】（基于常规链路，用于选手端小地图/界面绘制）
+// =========================================================
+// 图层删除指令（子内容ID0x0100，机器人交互数据子类型）
+typedef struct {
+    uint8_t delete_type;        // 删除操作（0=空 1=删除图层 2=删除所有）
+    uint8_t layer;              // 图层数（0~9）
+} interaction_layer_delete_t;
 
-
-
-/* 图形数据 */
-typedef struct
-{
-	uint8_t graphic_name[3];
-	uint32_t operate_tpye : 3;
-	uint32_t figure_tpye : 3;
-	uint32_t layer : 4;
-	uint32_t color : 4;
-	uint32_t details_a : 9;
-	uint32_t details_b : 9;
-	uint32_t width : 10;
-	uint32_t start_x : 11;
-	uint32_t start_y : 11;
-    uint32_t details_c: 10;
-    uint32_t details_d: 11;
-    uint32_t details_e: 11;
+// 单个图形绘制（子内容ID0x0101，机器人交互数据子类型）
+typedef struct {
+    uint8_t figure_name[3];     // 图形名（索引用）
+    // 第1个uint32_t（0~31bit）
+    uint32_t operate_tpye:3;    // 图形操作（0=空 1=增加 2=修改 3=删除）
+    uint32_t figure_tpye:3;     // 图形类型（0=直线 1=矩形 2=正圆等）
+    uint32_t layer:4;           // 图层数（0~9）
+    uint32_t color:4;           // 颜色（0=己方色 1=黄等8种）
+    uint32_t details_a:9;       // 细节参数A（随类型变化）
+    uint32_t details_b:9;       // 细节参数B（随类型变化）
+    // 第2个uint32_t（0~31bit）
+    uint32_t width:10;          // 线宽（字体:线宽=10:1）
+    uint32_t start_x:11;        // 起点/圆心x坐标
+    uint32_t start_y:11;        // 起点/圆心y坐标
+    // 第3个uint32_t（0~31bit）
+    uint32_t details_c:10;      // 细节参数C（随类型变化）
+    uint32_t details_d:11;      // 细节参数D（随类型变化）
+    uint32_t details_e:11;      // 细节参数E（随类型变化）
 } interaction_figure_t;
 
-typedef struct
-{
-	interaction_figure_t Graph_Control;
-	uint8_t show_Data[30];
-} String_Data_t; // 打印字符串数据
+// 两个图形绘制（子内容ID0x0102，机器人交互数据子类型）
+typedef struct {
+    interaction_figure_t interaction_figure[2]; // 两个图形实例
+} interaction_figure_2_t;
 
-/* 删除操作 */
-typedef enum
-{
-	UI_Data_Del_NoOperate = 0,
-	UI_Data_Del_Layer = 1,
-	UI_Data_Del_ALL = 2, // 删除全部图层，后面的参数已经不重要了。
-} UI_Delete_Operate_e;
+// 五个图形绘制（子内容ID0x0103，机器人交互数据子类型）
+typedef struct {
+    interaction_figure_t interaction_figure[5]; // 五个图形实例
+} interaction_figure_3_t;
 
-/* 图形配置参数__图形操作 */
-typedef enum
-{
-	UI_Graph_ADD = 1,
-	UI_Graph_Change = 2,
-	UI_Graph_Del = 3,
-} UI_Graph_Operate_e;
+// 七个图形绘制（子内容ID0x0104，机器人交互数据子类型）
+typedef struct {
+    interaction_figure_t interaction_figure[7]; // 七个图形实例
+} interaction_figure_4_t;
 
-/* 图形配置参数__图形类型 */
-typedef enum
-{
-	UI_Graph_Line = 0,		// 直线
-	UI_Graph_Rectangle = 1, // 矩形
-	UI_Graph_Circle = 2,	// 整圆
-	UI_Graph_Ellipse = 3,	// 椭圆
-	UI_Graph_Arc = 4,		// 圆弧
-	UI_Graph_Float = 5,		// 浮点型
-	UI_Graph_Int = 6,		// 整形
-	UI_Graph_Char = 7,		// 字符型
+// 字符图形绘制（子内容ID0x0110，机器人交互数据子类型）
+typedef struct {
+    uint16_t data_cmd_id;       // 内容ID（固定0x0110）
+    uint16_t sender_id;         // 发送者ID（需校验）
+    uint16_t receiver_id;       // 接收者ID（仅对应选手端）
+    // 15字节图形配置（同interaction_figure_t）
+    uint8_t figure_name[3];
+    uint32_t operate_tpye:3;
+    uint32_t figure_tpye:3;
+    uint32_t layer:4;
+    uint32_t color:4;
+    uint32_t details_a:9;
+    uint32_t details_b:9;
+    uint32_t width:10;
+    uint32_t start_x:11;
+    uint32_t start_y:11;
+    uint32_t details_c:10;
+    uint32_t details_d:11;
+    uint32_t details_e:11;
+    uint8_t data[30];           // 字符数据（utf-16编码，支持中文）
+} ext_client_custom_character_t;
 
-} UI_Graph_Type_e;
-
-/* 图形配置参数__图形颜色 */
-typedef enum
-{
-	UI_Color_Main = 0, // 红蓝主色
-	UI_Color_Yellow = 1,
-	UI_Color_Green = 2,
-	UI_Color_Orange = 3,
-	UI_Color_Purplish_red = 4, // 紫红色
-	UI_Color_Pink = 5,
-	UI_Color_Cyan = 6, // 青色
-	UI_Color_Black = 7,
-	UI_Color_White = 8,
-
-} UI_Graph_Color_e;
-
-typedef  struct//哨兵自主决策指令：0x0120
-{
-    uint32_t sentry_cmd;
-} sentry_cmd_t;
-
-typedef struct//雷达自主决策指令：0x0121
-{
-    uint8_t radar_cmd;
-} radar_cmd_t;
 
 #pragma pack()
 
