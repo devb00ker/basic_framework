@@ -26,6 +26,7 @@ static Chassis_Ctrl_Cmd_s chassis_cmd_send; // 发送给底盘应用的信息,�
 static Chassis_Upload_Data_s chassis_fetch_data; // 从底盘应用接收的反馈信息信息,底盘功率枪口热量与底盘运动状态等
 
 static RC_ctrl_t* rc_data; // 遥控器数据,初始化时返回
+static RC_Referee_ctrl_t* rc_referee_data; // 遥控器数据,初始化时返回
 static Vision_Recv_s* vision_recv_data; // 视觉接收数据指针,初始化时返回
 
 static Publisher_t* gimbal_cmd_pub; // 云台控制消息发布者
@@ -43,7 +44,10 @@ static Robot_Status_e robot_state; // 机器人整体工作状态
 void RobotCMDInit()
 {
     rc_data = RemoteControlInit(&huart3); // 修改为对应串口,注意如果是自研板dbus协议串口需选用添加了反相器的那个
-    vision_recv_data = VisionInit(&huart1); // 视觉通信串口
+
+    rc_referee_data=RemoteControl_Referee_Init(&huart1); // referee control
+
+    vision_recv_data = VisionInit(); // 视觉通信串口
 
     gimbal_cmd_pub = PubRegister("gimbal_cmd", sizeof(Gimbal_Ctrl_Cmd_s));
     gimbal_feed_sub = SubRegister("gimbal_feed", sizeof(Gimbal_Upload_Data_s));
@@ -128,12 +132,14 @@ static void RemoteControlSet()
             shoot_cmd_send.load_mode = LOAD_STOP;
             shoot_cmd_send.shoot_mode= SHOOT_OFF;
         }
-        if(rc_data[TEMP].rc.dial>400||rc_data[TEMP].rc.dial<-400){
-            chassis_cmd_send.chassis_mode = CHASSIS_ROTATE;
-        }
-        else {
-            chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
-        }
+
+    }
+
+    if(rc_data[TEMP].rc.dial>400||rc_data[TEMP].rc.dial<-400){
+        chassis_cmd_send.chassis_mode = CHASSIS_ROTATE;
+    }
+    else {
+        chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
     }
 }
 

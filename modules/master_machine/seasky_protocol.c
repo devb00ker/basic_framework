@@ -34,7 +34,7 @@ static uint8_t CRC8_Check_Sum(uint8_t* pchMessage, uint16_t dwLength)
 /*获取CRC16校验码*/
 uint16_t Get_CRC16_Check(uint8_t* pchMessage, uint32_t dwLength)
 {
-    return crc_16(pchMessage, dwLength);
+    return crc_16(pchMessage, dwLength,CRC16_MODBUS);
 }
 
 /*检验CRC16数据段*/
@@ -45,7 +45,7 @@ static uint16_t CRC16_Check_Sum(uint8_t* pchMessage, uint32_t dwLength)
     {
         return 0;
     }
-    wExpected = crc_16(pchMessage, dwLength - 2);
+    wExpected = crc_16(pchMessage, dwLength - 2,CRC16_MODBUS);
     return (((wExpected & 0xff) == pchMessage[dwLength - 2]) &&
         (((wExpected >> 8) & 0xff) == pchMessage[dwLength - 1]));
 }
@@ -128,7 +128,7 @@ void get_protocol_send_data(uint16_t send_id, // 信号id
     }
 
     /*整包校验*/
-    crc16 = crc_16(&tx_buf[0], data_len + 6);
+    crc16 = crc_16(&tx_buf[0], data_len + 6,CRC16_MODBUS);
     tx_buf[data_len + 6] = crc16 & 0xff;
     tx_buf[data_len + 7] = (crc16 >> 8) & 0xff;
 

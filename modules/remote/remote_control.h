@@ -44,8 +44,8 @@
 // referee system
 // Gear
 #define REFEREE_GEAR_C 0
-#define REFEREE_GEAR_S 1
-#define REFEREE_GEAR_N 2
+#define REFEREE_GEAR_N 1
+#define REFEREE_GEAR_S 2
 //Button
 #define HAVEN_PRRESSED 1
 #define UNHAVEN_PRRESSED 0
@@ -143,7 +143,7 @@ typedef struct
 {
     struct
     {
-        int16_t rocker_r_;              //  右水平通 通道0
+        int16_t rocker_r_;              //  右水平通 通道0 左侧官方有误
         int16_t rocker_r1;              //  右竖直 通道1
         int16_t rocker_l_;              //  左水平 通道2
         int16_t rocker_l1;              //  左竖直 通道3

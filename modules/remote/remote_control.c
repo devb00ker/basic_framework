@@ -183,7 +183,7 @@ RC_ctrl_t* RemoteControlInit(UART_HandleTypeDef* rc_usart_handle)
     Daemon_Init_Config_s daemon_conf = {
         .reload_count = 10, // 100ms未收到数据视为离线,遥控器的接收频率实际上是1000/14Hz(大约70Hz)
         .callback = RCLostCallback,
-        .owner_id = (void *)rc_daemon_instance, // 只有1个遥控器,不需要owner_id
+        .owner_id = (void *)rc_usart_instance, // 只有1个遥控器,不需要owner_id
     };
     rc_daemon_instance = DaemonRegister(&daemon_conf);
 
@@ -206,9 +206,9 @@ static void uart_to_rc(const uint8_t* uart_buf)
     rc_referee_ctrl[TEMP].rc.rocker_r1 = (((uart_buf[1] >> 3) | (uart_buf[2] << 5)) & 0x07ffU) - RC_CH_VALUE_OFFSET;
 
     // 左水平摇杆 & 左竖直摇杆
-    rc_referee_ctrl[TEMP].rc.rocker_l_ = (((uart_buf[2] >> 6) | (uart_buf[3] << 2) | (uart_buf[4] << 10)) & 0x07ffU) -
+    rc_referee_ctrl[TEMP].rc.rocker_l1 = (((uart_buf[2] >> 6) | (uart_buf[3] << 2) | (uart_buf[4] << 10)) & 0x07ffU) -
         RC_CH_VALUE_OFFSET;
-    rc_referee_ctrl[TEMP].rc.rocker_l1 = (((uart_buf[4] >> 1) | (uart_buf[5] << 7)) & 0x07ffU) - RC_CH_VALUE_OFFSET;
+    rc_referee_ctrl[TEMP].rc.rocker_l_ = (((uart_buf[4] >> 1) | (uart_buf[5] << 7)) & 0x07ffU) - RC_CH_VALUE_OFFSET;
     // 挡位切换开关 (位60~61，2位)
     rc_referee_ctrl[TEMP].rc.switch_gear = (uint8_t)((uart_buf[5] >> 4) & 0x03U);
 
@@ -229,11 +229,11 @@ static void uart_to_rc(const uint8_t* uart_buf)
     rc_referee_ctrl[TEMP].rc.trigger_button = (uint8_t)((uart_buf[7] >> 4) & 0x01U);
 
     // 摇杆非线性/死区校正统一处理
-    for (uint8_t i = 0; i < 4; ++i)                             //rocker_r_       0
-        if (abs(*(&rc_ctrl[TEMP].rc.rocker_l_ + i)) > 660)      //rocker_r1         1
-            *(&rc_ctrl[TEMP].rc.rocker_l_ + i) = 0;             //rocker_l_             2
-    if (abs(*(&rc_ctrl[TEMP].rc.dial )) > 660)          //rocker_l1             3
-        *(&rc_ctrl[TEMP].rc.dial) = 0;                 //dial  8
+    for (uint8_t i = 0; i < 4; ++i)                                     //rocker_r_       0
+        if (abs(*(&rc_referee_ctrl[TEMP].rc.rocker_l_ + i)) > 660)      //rocker_r1         1
+            *(&rc_referee_ctrl[TEMP].rc.rocker_l_ + i) = 0;             //rocker_l_             2
+    if (abs(*(&rc_referee_ctrl[TEMP].rc.dial )) > 660)                   //rocker_l1             3
+        *(&rc_referee_ctrl[TEMP].rc.dial) = 0;                              //dial  8
 
     // ==============================================
     // 3. 鼠标数据解析（16位有符号，小端）
@@ -314,7 +314,7 @@ static void RemoteControl_Referee_RxCallback()
     //Verify CRC
     uint16_t recv_crc = buf[19] | ((uint16_t)buf[20] << 8);
 
-    uint16_t calc_crc = crc_16(buf, DATA_BEFORE_CRC_LEN);
+    uint16_t calc_crc = crc_16(buf, DATA_BEFORE_CRC_LEN,CRC16_CCITT_FALSE);
     //CRC-16/CCITT-FALSE P(x)=x16+x12+x5+1 初始值为0xFFFF，无输入输出反转，无异或
     if (recv_crc == calc_crc)
     {
@@ -334,13 +334,13 @@ RC_Referee_ctrl_t* RemoteControl_Referee_Init(UART_HandleTypeDef* rc_usart_handl
     conf.module_callback = RemoteControl_Referee_RxCallback;
     conf.usart_handle = rc_usart_handle;
     conf.recv_buff_size = REMOTE_REFEREE_CONTROL_FRAME_SIZE;
-    rc_usart_instance = USARTRegister(&conf);
+    rc_referee_usart_instance = USARTRegister(&conf);
 
     // 进行守护进程的注册,用于定时检查遥控器是否正常工作
     Daemon_Init_Config_s daemon_conf = {
         .reload_count = 10, // 100ms未收到数据视为离线,遥控器的接收频率实际上是1000/14Hz(大约70Hz)
         .callback = RC_Referee_LostCallback,
-        .owner_id =(void *)rc_referee_daemon_instance , // 只有1个遥控器,不需要owner_id
+        .owner_id =(void *)rc_referee_usart_instance , // 只有1个遥控器,不需要owner_id
     };
     rc_referee_daemon_instance = DaemonRegister(&daemon_conf);
 
