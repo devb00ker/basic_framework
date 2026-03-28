@@ -28,8 +28,8 @@ uint8_t UI_Seq;                                      // 包序号，供整个ref
  */
 static void DeterminRobotID() {
     // id小于7是红色,大于7是蓝色,0为红色，1为蓝色   #define Robot_Red 0    #define Robot_Blue 1
-    referee_recv_info->referee_id.Robot_Color = referee_recv_info->GameRobotState.robot_id > 7 ? Robot_Blue : Robot_Red;
-    referee_recv_info->referee_id.Robot_ID = referee_recv_info->GameRobotState.robot_id;
+    // referee_recv_info->referee_id.Robot_Color = referee_recv_info->GameRobotState.robot_id > 7 ? Robot_Blue : Robot_Red;
+    // referee_recv_info->referee_id.Robot_ID = referee_recv_info->GameRobotState.robot_id;
     referee_recv_info->referee_id.Cilent_ID = 0x0100 + referee_recv_info->referee_id.Robot_ID; // 计算客户端ID
     referee_recv_info->referee_id.Receiver_Robot_ID = 0;
 }
@@ -60,7 +60,7 @@ static uint32_t shoot_line_location[10] = {540, 960, 490, 515, 565};
 void MyUIInit() {
     if (!referee_recv_info->init_flag)
         vTaskDelete(NULL); // 如果没有初始化裁判系统则直接删除ui任务
-    while (referee_recv_info->GameRobotState.robot_id == 0)
+    // while (referee_recv_info->GameRobotState.robot_id == 0)
         osDelay(100); // 若还未收到裁判系统数据,等待一段时间后再检查
 
     DeterminRobotID();                                            // 确定ui要发送到的目标客户端

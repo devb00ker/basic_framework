@@ -56,66 +56,66 @@ static void JudgeReadData(uint8_t *buff)
 				// 第8个字节开始才是数据 data=7
 				switch (referee_info.CmdID)
 				{
-				case ID_game_state: // 0x0001
-					memcpy(&referee_info.GameState, (buff + DATA_Offset), LEN_game_state);
+				case REF_ID_game_state: // 0x0001
+					//memcpy(&referee_info.GameState, (buff + DATA_Offset), LEN_REF_game_state);
 					break;
-				case ID_game_result: // 0x0002
-					memcpy(&referee_info.GameResult, (buff + DATA_Offset), LEN_game_result);
+				case REF_ID_game_result: // 0x0002
+				//	memcpy(&referee_info.GameResult, (buff + DATA_Offset), LEN_REF_game_result);
 					break;
-				case ID_game_robot_survivors: // 0x0003
-					memcpy(&referee_info.GameRobotHP, (buff + DATA_Offset), LEN_game_robot_survivors);
+				case REF_ID_game_robot_survivors: // 0x0003
+					//memcpy(&referee_info.GameRobotHP, (buff + DATA_Offset), LEN_REF_game_robot_survivors);
 					break;
-				case ID_event_data: // 0x0101
-					memcpy(&referee_info.EventData, (buff + DATA_Offset), LEN_event_data);
+				// case REF_ID_event_data: // 0x0101
+				// 	memcpy(&referee_info.EventData, (buff + DATA_Offset), LEN_REF_event_data);
+				// 	break;
+				// // case REF_ID_supply_projectile_action: // 0x0102
+				// // 	memcpy(&referee_info.SupplyProjectileAction, (buff + DATA_Offset), LEN_REF_supply_projectile_action);
+				// // 	break;
+				// case REF_ID_robot_status: // 0x0201
+				// 	memcpy(&referee_info.GameRobotState, (buff + DATA_Offset), LEN_REF_robot_status);
+				// 	break;
+				// case REF_ID_power_heat_data: // 0x0202
+				// 	memcpy(&referee_info.PowerHeatData, (buff + DATA_Offset), LEN_REF_power_heat_data);
+				// 	break;
+				// case REF_ID_game_robot_pos: // 0x0203
+				// 	memcpy(&referee_info.GameRobotPos, (buff + DATA_Offset), LEN_REF_game_robot_pos);
+				// 	break;
+				// case REF_ID_buff: // 0x0204
+				// 	memcpy(&referee_info.BuffMusk, (buff + DATA_Offset), LEN_REF_buff);
+				// 	break;
+				// case REF_ID_air_support_data: // 0x0205
+				// 	memcpy(&referee_info.AerialRobotEnergy, (buff + DATA_Offset), LEN_REF_air_support_data);
+				// 	break;
+				// case REF_ID_robot_hurt: // 0x0206
+				// 	memcpy(&referee_info.RobotHurt, (buff + DATA_Offset), LEN_REF_robot_hurt);
+				// 	break;
+				case REF_ID_shoot_data: // 0x0207
+				// 	memcpy(&referee_info.ShootData, (buff + DATA_Offset), LEN_REF_shoot_data);
+				// 	break;
+				// case REF_ID_projectile_allowance: // 0x0208
+				// 	memcpy(&referee_info.AllowanceProjectile, (buff + DATA_Offset), LEN_REF_projectile_allowance);
+				// 	break;
+				// case REF_ID_rfid_status: // 0x0209
+				// 	memcpy(&referee_info.RfidStatus, (buff + DATA_Offset), LEN_REF_rfid_status);
+				// 	break;
+				// case REF_ID_dart_client_cmd: // 0x020A
+				// 	memcpy(&referee_info.DartClient, (buff + DATA_Offset), LEN_REF_dart_client_cmd);
 					break;
-				case ID_supply_projectile_action: // 0x0102
-					memcpy(&referee_info.SupplyProjectileAction, (buff + DATA_Offset), LEN_supply_projectile_action);
-					break;
-				case ID_robot_status_t: // 0x0201
-					memcpy(&referee_info.GameRobotState, (buff + DATA_Offset), LEN_robot_status_t);
-					break;
-				case ID_power_heat_data: // 0x0202
-					memcpy(&referee_info.PowerHeatData, (buff + DATA_Offset), LEN_power_heat_data);
-					break;
-				case ID_game_robot_pos: // 0x0203
-					memcpy(&referee_info.GameRobotPos, (buff + DATA_Offset), LEN_game_robot_pos);
-					break;
-				case ID_buff_t: // 0x0204
-					memcpy(&referee_info.BuffMusk, (buff + DATA_Offset), LEN_buff_t);
-					break;
-				case ID_air_support_data_t: // 0x0205
-					memcpy(&referee_info.AerialRobotEnergy, (buff + DATA_Offset), LEN_air_support_data_t);
-					break;
-				case ID_robot_hurt: // 0x0206
-					memcpy(&referee_info.RobotHurt, (buff + DATA_Offset), LEN_robot_hurt);
-					break;
-				case ID_shoot_data: // 0x0207
-					memcpy(&referee_info.ShootData, (buff + DATA_Offset), LEN_shoot_data);
-					break;
-                case ID_projectile_allowance: // 0x0208
-                    memcpy(&referee_info.AllowanceProjectile, (buff + DATA_Offset), LEN_projectile_allowance);
-                     break;
-                case ID_rfid_status_t: // 0x0209
-                    memcpy(&referee_info.RfidStatus, (buff + DATA_Offset), LEN_rfid_status_t);
-                    break;
-                case ID_darts_client_cmd: // 0x020A
-                    memcpy(&referee_info.DartClient, (buff + DATA_Offset), LEN_darts_client_cmd);
-                    break;
-                case ID_ground_robot_position_t: // 0x020B
-                    memcpy(&referee_info.RobotPostion, (buff + DATA_Offset), LEN_ground_robot_position_t);
-                    break;
-                case ID_radar_mark_data_t: // 0x020C
-                    memcpy(&referee_info.RadarMark, (buff + DATA_Offset), LEN_radar_mark_data_t);
-                    break;
-                case ID_sentry_info_t: // 0x020D
-                    memcpy(&referee_info.SentryInfo, (buff + DATA_Offset), LEN_sentry_info_t);
-                    break;
-                case ID_radar_info_t: // 0x020E
-                    memcpy(&referee_info.RadarInfo, (buff + DATA_Offset), LEN_radar_info_t);
-                    break;
-                case ID_student_interactive: // 0x0301   syhtodo接收代码未测试
-					memcpy(&referee_info.ReceiveData, (buff + DATA_Offset), LEN_student_interactive);
-					break;
+				// case REF_ID_ground_robot_position: // 0x020B
+				// 	memcpy(&referee_info.RobotPostion, (buff + DATA_Offset), LEN_REF_ground_robot_position);
+				// 	break;
+				// case REF_ID_radar_mark_data: // 0x020C
+				// 	memcpy(&referee_info.RadarMark, (buff + DATA_Offset), LEN_REF_radar_mark_data);
+				// 	break;
+				// case REF_ID_sentry_info: // 0x020D
+				// 	memcpy(&referee_info.SentryInfo, (buff + DATA_Offset), LEN_REF_sentry_info);
+				// 	break;
+				// case REF_ID_radar_info: // 0x020E
+				// 	memcpy(&referee_info.RadarInfo, (buff + DATA_Offset), LEN_REF_radar_info);
+				// 	break;
+				// case VID_ID_student_interactive: // 0x0301   syhtodo接收代码未测试
+				// 	//memcpy(&referee_info.ReceiveData, (buff + DATA_Offset), LEN_VID_student_interactive);
+				// 	break;
 				}
 			}
 		}
