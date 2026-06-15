@@ -153,7 +153,7 @@ void INS_Task(void)
         BodyFrameToEarthFrame(yb, INS.yn, INS.q);
         BodyFrameToEarthFrame(zb, INS.zn, INS.q);
 
-        // 将重力从导航坐标系n转换到机体系b,随后根据加速度计数据计算运动加速度
+        // 将重力从导航坐标系n转换到机体系b,随后根据加速度计数据计算运动加速度    实际未使用
         float gravity_b[3];
         EarthFrameToBodyFrame(gravity, gravity_b, INS.q);
         for (uint8_t i = 0; i < 3; ++i) // 同样过一个低通滤波

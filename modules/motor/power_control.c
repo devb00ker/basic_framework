@@ -16,6 +16,7 @@ static float initial_torque[4]; // 电机输出轴实际转矩，单位N·m
 static float A, B, C; // 测试用
 static float power_control_out[4], initial_give_power[4]; // 电机输出功率
 static float chassis_max_power, initial_total_power = 0.0f;
+static float current_p;
 /**
  * @brief 由于DJI电机发送以四个一组的形式进行,故对其进行特殊处理,用6个(2can*3group)can_instance专门负责发送
  *        该变量将在 DJIMotorControl() 中使用,分组在 MotorSenderGrouping()中进行
@@ -248,7 +249,9 @@ void PowerControl()
     Motor_Controller_s* motor_controller; // 电机控制器
     DJI_Motor_Measure_s* measure; // 电机测量值
     float pid_measure, pid_ref; // 电机PID测量值和设定值
-    initial_total_power = 0.0f;
+
+    initial_total_power = 0.0f; //预估总功率
+
     // 遍历所有电机实例,进行串级PID的计算并设置发送报文的值
     for (size_t i = 0; i < idx; ++i) // idx实际上是4个
     {
@@ -270,15 +273,16 @@ void PowerControl()
         {
             if (motor_setting->feedforward_flag & SPEED_FEEDFORWARD)
                 pid_ref += *motor_controller->speed_feedforward_ptr;
-
+            //从此处开始 与dji_motor.c不同
             if (motor_setting->speed_feedback_source == OTHER_FEED)
                 pid_measure = *motor_controller->other_speed_feedback_ptr;
             else // MOTOR_FEED
-                pid_measure = measure->speed_aps / 6.0f; // 电机的速度单位是度每秒,转换为rpm
+                pid_measure = measure->speed_aps / 6.0f; // 电机的速度单位是度每秒,转换为rpm 因为在电机解包的时候 转为了度每秒 可能是为了 位置控制 在运动学结算的时候 也转为了RPM
             // 更新pid_ref进入下一个环
             pid_ref = PIDCalculate(&motor_controller->speed_PID, pid_measure, pid_ref);
-            initial_torque[i] = pid_ref;
-            power_control_out[i] = pid_ref;
+
+            initial_torque[i] = pid_ref;//目标输出
+            power_control_out[i] = pid_ref;//估算 模型消耗功率
             A = K1[i] * initial_torque[i] * initial_torque[i];
             B = K2[i] * pid_measure * pid_measure;
             C = POWER_COEF * pid_measure * initial_torque[i] * TORQUE_COEF;
@@ -289,9 +293,9 @@ void PowerControl()
             pid_ref *= -1;
 
         // 获取最终输出
-        power_control_out[i] = pid_ref;
+        power_control_out[i] = pid_ref;//若 未超功率则用当前的
     }
-    for (uint8_t i = 0; i < idx; i++)
+    for (uint8_t i = 0; i < idx; i++) //累加底盘电机功率
     {
         if (initial_give_power[i] < 0)
         {
@@ -299,9 +303,10 @@ void PowerControl()
         }
         initial_total_power += initial_give_power[i];
     }
-    if (initial_total_power > chassis_max_power)
+    current_p=initial_total_power;
+    if (current_p > chassis_max_power) //若大于 限制功率 先缩目标功率 再根据功率方程反推出此时允许的输出力矩/电流
     {
-        float ratio = chassis_max_power / initial_total_power; // 根据允许的最大功率进行放缩
+        float ratio = chassis_max_power / current_p; // 根据允许的最大功率进行放缩
         for (uint8_t i = 0; i < idx; i++)
         {
             motor = dji_motor_instance[i];
@@ -317,7 +322,7 @@ void PowerControl()
             float c = K2[i] * pid_measure * pid_measure - initial_give_power[i] + constant[i];
             if (power_control_out[i] > 0)
             {
-                power_control_out[i] = (-b + sqrt(b * b - 4 * a * c)) / (2 * a);
+                power_control_out[i] = (-b + sqrt(b * b - 4 * a * c)) / (2 * a); //求根公式
                 if (power_control_out[i] > 15000)
                 {
                     power_control_out[i] = 15000;

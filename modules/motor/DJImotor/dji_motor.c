@@ -135,7 +135,7 @@ static void DecodeDJIMotor(CANInstance *_instance)
     measure->ecd = ((uint16_t)rxbuff[0]) << 8 | rxbuff[1];
     measure->angle_single_round = ECD_ANGLE_COEF_DJI * (float)measure->ecd;//8192->360当前刻度对应的角度
     measure->speed_aps = (1.0f - SPEED_SMOOTH_COEF) * measure->speed_aps +
-                         RPM_2_ANGLE_PER_SEC * SPEED_SMOOTH_COEF * (float)((int16_t)(rxbuff[2] << 8 | rxbuff[3]));//度每秒
+                         RPM_2_ANGLE_PER_SEC * SPEED_SMOOTH_COEF * (float)((int16_t)(rxbuff[2] << 8 | rxbuff[3]));//度每秒 一阶低通滤波（也叫指数滑动平均滤波 / EMA）
     measure->real_current = (1.0f - CURRENT_SMOOTH_COEF) * measure->real_current +
                             CURRENT_SMOOTH_COEF * (float)((int16_t)(rxbuff[4] << 8 | rxbuff[5]));//电流和速度一阶低通滤波
     measure->temperature = rxbuff[6];
@@ -232,7 +232,7 @@ void DJIMotorSetRef(DJIMotorInstance *motor, float ref)
 // 为所有电机实例计算三环PID,发送控制报文
 void DJIMotorControl()
 {
-    // 直接保存一次指针引用从而减小访存的开销,同样可以提高可读性
+    // 直接保存一次指针引用从而减小访存的开销,同样可以提高可读性  局部栈提高访问
     uint8_t group, num; // 电机组号和组内编号
     int16_t set;        // 电机控制CAN发送设定值
     DJIMotorInstance *motor;

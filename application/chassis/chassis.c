@@ -47,7 +47,7 @@ static DJIMotorInstance *motor_lf, *motor_rf, *motor_lb, *motor_rb; // left righ
 static float chassis_vx, chassis_vy; // 将云台系的速度投影到底盘
 static float vt_lf, vt_rf, vt_lb, vt_rb; // 底盘速度解算后的临时输出,待进行限幅
 static float sin_theta, cos_theta;
-static float vx, vy, wz;
+static float vx, vy, wz;//正向解算 出的底盘姿态
 
 void ChassisInit()
 {
@@ -76,7 +76,7 @@ void ChassisInit()
     //  @todo: 当前还没有设置电机的正反转,仍然需要手动添加reference的正负号,需要电机module的支持,待修改.
     //使用功率控制的电机需要使用PowerControlInit()函数初始化,因为电机的控制方式不同
     chassis_motor_config.can_init_config.tx_id = 1;
-    chassis_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_NORMAL;
+    chassis_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_REVERSE;
     motor_lf = PowerControlInit(&chassis_motor_config);
 
     chassis_motor_config.can_init_config.tx_id = 2;
@@ -88,7 +88,7 @@ void ChassisInit()
     motor_lb = PowerControlInit(&chassis_motor_config);
 
     chassis_motor_config.can_init_config.tx_id = 3;
-    chassis_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_NORMAL;
+    chassis_motor_config.controller_setting_init_config.motor_reverse_flag = MOTOR_DIRECTION_REVERSE;
     motor_rb = PowerControlInit(&chassis_motor_config);
 
     referee_data = UITaskInit(&huart6, &ui_data); // 裁判系统初始化,会同时初始化UI
@@ -98,7 +98,7 @@ void ChassisInit()
     chassis_pub = PubRegister("chassis_feed", sizeof(Chassis_Upload_Data_s));
 }
 
-#define LF_CENTER ((HALF_TRACK_WIDTH + CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE - CENTER_GIMBAL_OFFSET_Y) * DEGREE_2_RAD)
+#define LF_CENTER ((HALF_TRACK_WIDTH + CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE - CENTER_GIMBAL_OFFSET_Y) * DEGREE_2_RAD)  //v = w x r  在 rad/s时才成立
 #define RF_CENTER ((HALF_TRACK_WIDTH - CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE - CENTER_GIMBAL_OFFSET_Y) * DEGREE_2_RAD)
 #define LB_CENTER ((HALF_TRACK_WIDTH + CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE + CENTER_GIMBAL_OFFSET_Y) * DEGREE_2_RAD)
 #define RB_CENTER ((HALF_TRACK_WIDTH - CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE + CENTER_GIMBAL_OFFSET_Y) * DEGREE_2_RAD)
@@ -108,10 +108,10 @@ void ChassisInit()
  */
 static void Calculate()
 {
-    vt_lf = -chassis_vx - chassis_vy - chassis_cmd_recv.wz * LF_CENTER;
-    vt_rf = -chassis_vx + chassis_vy - chassis_cmd_recv.wz * RF_CENTER;
-    vt_lb = chassis_vx - chassis_vy - chassis_cmd_recv.wz * LB_CENTER;
-    vt_rb = chassis_vx + chassis_vy - chassis_cmd_recv.wz * RB_CENTER;
+    vt_lf = ((-chassis_vx + chassis_vy)/sqrt_2 + chassis_cmd_recv.wz * LF_CENTER)/RADIUS_WHEEL;  //1  四个电机都正转因此 在此处做了 处理 理论上 应该设置 两侧电机旋转方向相反  mm/s
+    vt_rf = ((chassis_vx + chassis_vy )/sqrt_2 -chassis_cmd_recv.wz * RF_CENTER)/RADIUS_WHEEL;  //2
+    vt_lb = ((-chassis_vx - chassis_vy)/sqrt_2 - chassis_cmd_recv.wz * LB_CENTER)/RADIUS_WHEEL;  //4
+    vt_rb = ((chassis_vx - chassis_vy )/sqrt_2 + chassis_cmd_recv.wz * RB_CENTER)/RADIUS_WHEEL;  //3
 }
 
 /**
@@ -136,12 +136,13 @@ static void LimitChassisOutput()
  *        对于双板的情况,考虑增加来自底盘板IMU的数据
  *
  */
-static void EstimateSpeed()
+static void EstimateSpeed()//aps(REDUCTION_RATIO_WHEEL)减速比 从转子速度到电机速度 -> / 360.0f(aps->rps) -> *PERIMETER_WHEEL(rps->mm/s) [v=wr][PERIMETER_WHEEL=2*pi*r]{rps*2pi->rad/s*r->v} ->*1000(mm/s->m/s) 其余为解算系数
 {
     // 根据电机速度和陀螺仪的角速度进行解算,还可以利用加速度计判断是否打滑(如果有)
-    vx = (motor_lf->measure.speed_aps - motor_rf->measure.speed_aps + motor_lb->measure.speed_aps - motor_rb->measure.speed_aps) / 4.0f / REDUCTION_RATIO_WHEEL / 360.0f * PERIMETER_WHEEL / 1000.0f / sqrt_2;
-    vy = (-motor_lf->measure.speed_aps - motor_rf->measure.speed_aps + motor_lb->measure.speed_aps + motor_rb->measure.speed_aps) / 4.0f / REDUCTION_RATIO_WHEEL / 360.0f * PERIMETER_WHEEL / 1000.0f / sqrt_2;
-    wz = (-motor_lf->measure.speed_aps - motor_rf->measure.speed_aps - motor_lb->measure.speed_aps - motor_rb->measure.speed_aps) / (LF_CENTER + RF_CENTER + LB_CENTER + RB_CENTER);
+    vx = ((-motor_lf->measure.speed_aps + motor_rf->measure.speed_aps + motor_lb->measure.speed_aps - motor_rb->measure.speed_aps) / 4.0f * sqrt_2) / REDUCTION_RATIO_WHEEL / 360.0f * PERIMETER_WHEEL / 1000.0f ;
+    vy = ((motor_lf->measure.speed_aps + motor_rf->measure.speed_aps - motor_lb->measure.speed_aps - motor_rb->measure.
+        speed_aps) / 4.0f * sqrt_2) / REDUCTION_RATIO_WHEEL / 360.0f * PERIMETER_WHEEL / 1000.0f;
+    wz =  (motor_lf->measure.speed_aps - motor_rf->measure.speed_aps + motor_lb->measure.speed_aps - motor_rb->measure.speed_aps)  / (LF_CENTER + RF_CENTER + LB_CENTER + RB_CENTER);
     chassis_feedback_data.real_vx = vx * cos_theta - vy * sin_theta;
     chassis_feedback_data.real_vy = +vx * sin_theta + vy * cos_theta;
 }
@@ -176,7 +177,7 @@ void ChassisTask()
         chassis_cmd_recv.wz = 0;
         break;
     case CHASSIS_FOLLOW_GIMBAL_YAW: // 跟随云台,不单独设置pid,以误差角度平方为速度输出
-        chassis_cmd_recv.wz = 2.5f * chassis_cmd_recv.offset_angle * abs(chassis_cmd_recv.offset_angle);
+        // chassis_cmd_recv.wz = 2.5f * chassis_cmd_recv.offset_angle * abs(chassis_cmd_recv.offset_angle);
         break;
     case CHASSIS_ROTATE: // 自旋,同时保持全向机动;当前wz维持定值,后续增加不规则的变速策略
         chassis_cmd_recv.wz = 4000;
@@ -189,7 +190,7 @@ void ChassisTask()
     // 底盘逆时针旋转为角度正方向;云台命令的方向以云台指向的方向为x,采用右手系(x指向正北时y在正东)
     cos_theta = arm_cos_f32(chassis_cmd_recv.offset_angle * DEGREE_2_RAD);
     sin_theta = arm_sin_f32(chassis_cmd_recv.offset_angle * DEGREE_2_RAD);
-    chassis_vx = chassis_cmd_recv.vx * cos_theta - chassis_cmd_recv.vy * sin_theta;
+    chassis_vx = chassis_cmd_recv.vx * cos_theta - chassis_cmd_recv.vy * sin_theta;//chassis_cmd_recv 是云台坐标系下 操作手坐标系（云台坐标系）
     chassis_vy = chassis_cmd_recv.vx * sin_theta + chassis_cmd_recv.vy * cos_theta;
 
     // 根据控制模式进行正运动学解算,计算底盘输出
