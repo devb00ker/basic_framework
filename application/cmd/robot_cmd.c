@@ -42,8 +42,8 @@ static Robot_Status_e robot_state; // 机器人整体工作状态
 
 void RobotCMDInit()
 {
-    rc_data = RemoteControlInit(&huart3); // 修改为对应串口,注意如果是自研板dbus协议串口需选用添加了反相器的那个
-    vision_recv_data = VisionInit(&huart1); // 视觉通信串口
+    rc_data = RemoteControlInit(&huart1); // VT03 UART接在C板UART2，对应STM32 USART1
+    vision_recv_data = VisionInit(&huart1); // 当前VISION_USE_VCP模式使用USB虚拟串口，忽略此UART参数
 
     gimbal_cmd_pub = PubRegister("gimbal_cmd", sizeof(Gimbal_Ctrl_Cmd_s));
     gimbal_feed_sub = SubRegister("gimbal_feed", sizeof(Gimbal_Upload_Data_s));
@@ -87,54 +87,43 @@ static void CalcOffsetAngle()
  */
 static void RemoteControlSet()
 {
-    // 云台参数, 遥控器[左]侧开关确定云台控制数据 **********周期执行该函数 只可将初始状态放这**********
     chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
     gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
 
-    shoot_cmd_send.bullet_speed=SMALL_AMU_15;//default in switch start
-    shoot_cmd_send.shoot_rate=25 ;//若为0拨弹盘设置为0
-    //根据实际调整上两参数，调试用
-
-    // 遥控器[左]侧开关在[上]，遥控器控制云台
+    shoot_cmd_send.bullet_speed = SMALL_AMU_15;
+    shoot_cmd_send.shoot_rate = 25;
     gimbal_cmd_send.yaw -= 0.0007f * (float)rc_data[TEMP].rc.rocker_l_;
     gimbal_cmd_send.pitch -= 0.001f * (float)rc_data[TEMP].rc.rocker_l1;
+    chassis_cmd_send.vx = 20.0f * chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_r_;
+    chassis_cmd_send.vy = -20.0f * chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_r1;
 
-    chassis_cmd_send.vx = 20*(float)(chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_r_);
-    chassis_cmd_send.vy = -20* (float)(chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_r1);
-
-
-    // 遥控器[左]侧开关在[中]，视觉控制云台移动
-    if (switch_is_mid(rc_data[TEMP].rc.switch_left)||switch_is_down(rc_data[TEMP].rc.switch_left))
+    /* VT03 custom-right button holds visual aim; no target means retain manual gimbal control. */
+    if (rc_data[TEMP].rc.custom_button_right && vision_recv_data->target_state != NO_TARGET)
     {
-        shoot_cmd_send.friction_mode = FRICTION_ON;//开摩擦轮
-        if (vision_recv_data->target_state != NO_TARGET)
-        {
-            // 存在目标时视觉控制云台移动
-            gimbal_cmd_send.yaw = vision_recv_data->yaw;
-            gimbal_cmd_send.pitch = vision_recv_data->pitch;
-        }
-        if (switch_is_down(rc_data[TEMP].rc.switch_left))
-        {
-            // 开！
-            shoot_cmd_send.shoot_mode= SHOOT_ON;
-            shoot_cmd_send.load_mode = LOAD_BURSTFIRE;
-
-        }
-        else if (switch_is_mid(rc_data[TEMP].rc.switch_left))
-        {
-            // 关！
-            shoot_cmd_send.bullet_speed=BULLET_SPEED_NONE;
-            shoot_cmd_send.friction_mode = FRICTION_OFF;
-            shoot_cmd_send.load_mode = LOAD_STOP;
-            shoot_cmd_send.shoot_mode= SHOOT_OFF;
-        }
-
+        gimbal_cmd_send.yaw = vision_recv_data->yaw;
+        gimbal_cmd_send.pitch = vision_recv_data->pitch;
     }
 
-    if(rc_data[TEMP].rc.dial>400||rc_data[TEMP].rc.dial<-400){
+    /* Safe hold-to-run mapping: custom-left enables friction; trigger feeds only while held. */
+    if (rc_data[TEMP].rc.custom_button_left)
+    {
+        shoot_cmd_send.friction_mode = FRICTION_ON;
+        shoot_cmd_send.shoot_mode = SHOOT_ON;
+        shoot_cmd_send.load_mode = rc_data[TEMP].rc.trigger_button ? LOAD_BURSTFIRE : LOAD_STOP;
+    }
+    else
+    {
+        shoot_cmd_send.friction_mode = FRICTION_OFF;
+        shoot_cmd_send.shoot_mode = SHOOT_OFF;
+        shoot_cmd_send.load_mode = LOAD_STOP;
+    }
+
+    if (rc_data[TEMP].rc.dial > 400 || rc_data[TEMP].rc.dial < -400)
+    {
         chassis_cmd_send.chassis_mode = CHASSIS_ROTATE;
     }
-    else {
+    else
+    {
         chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
     }
 }

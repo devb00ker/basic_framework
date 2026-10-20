@@ -99,6 +99,11 @@ typedef struct
 
         uint8_t switch_left;  // 左侧开关
         uint8_t switch_right; // 右侧开关
+        uint8_t mode_switch;  // VT03模式挡位: C=0, N=1, S=2
+        uint8_t pause;        // VT03暂停键
+        uint8_t custom_button_left;
+        uint8_t custom_button_right;
+        uint8_t trigger_button;
     } rc;
     struct
     {
@@ -118,7 +123,7 @@ typedef struct
 /**
  * @brief 初始化遥控器,该函数会将遥控器注册到串口
  *
- * @attention 注意分配正确的串口硬件,遥控器在C板上使用USART3
+ * @attention VT03接C板丝印UART2时使用USART1，以调用时传入的句柄为准
  *
  */
 RC_ctrl_t *RemoteControlInit(UART_HandleTypeDef *rc_usart_handle);
@@ -129,5 +134,13 @@ RC_ctrl_t *RemoteControlInit(UART_HandleTypeDef *rc_usart_handle);
  * @return uint8_t 1:在线 0:离线
  */
 uint8_t RemoteControlIsOnline();
+
+/* 调试观察量：最近帧头匹配候选帧（可能CRC失败）、CRC和有效通道值 */
+extern volatile uint32_t vt03_valid_frame_count;
+extern volatile uint32_t vt03_crc_error_count;
+extern volatile uint16_t vt03_received_crc;
+extern volatile uint16_t vt03_calculated_crc;
+extern volatile uint8_t vt03_raw_frame[21];
+extern volatile int16_t vt03_channel_value[4];
 
 #endif

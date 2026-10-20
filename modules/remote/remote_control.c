@@ -1,139 +1,178 @@
 #include "remote_control.h"
 #include "string.h"
 #include "bsp_usart.h"
-#include "memory.h"
-#include "stdlib.h"
 #include "daemon.h"
 #include "bsp_log.h"
 
-#define REMOTE_CONTROL_FRAME_SIZE 18u // 遥控器接收的buffer大小
+#define REMOTE_CONTROL_FRAME_SIZE 21u
+#define VT03_FRAME_SIZE 21u
+#define VT03_CRC_DATA_SIZE 19u
 
-// 遥控器数据
-static RC_ctrl_t rc_ctrl[2]; //[0]:当前数据TEMP,[1]:上一次的数据LAST.用于按键持续按下和切换的判断
-static uint8_t rc_init_flag = 0; // 遥控器初始化标志位
-
-// 遥控器拥有的串口实例,因为遥控器是单例,所以这里只有一个,就不封装了
+static RC_ctrl_t rc_ctrl[2];
+static uint8_t rc_init_flag;
 static USARTInstance* rc_usart_instance;
 static DaemonInstance* rc_daemon_instance;
 
-/**
- * @brief 矫正遥控器摇杆的值,超过660或者小于-660的值都认为是无效值,置0
- *
- */
-static void RectifyRCjoystick()
+/* Ozone watch variables, intentionally kept global and volatile. */
+volatile uint32_t vt03_valid_frame_count;
+volatile uint32_t vt03_crc_error_count;
+volatile uint16_t vt03_received_crc;
+volatile uint16_t vt03_calculated_crc;
+volatile uint8_t vt03_raw_frame[VT03_FRAME_SIZE];
+volatile int16_t vt03_channel_value[4];
+
+static uint16_t VT03ReadBits(const uint8_t* data, uint16_t bit_offset, uint8_t bit_count)
 {
-    for (uint8_t i = 0; i < 5; ++i)
-        if (abs(*(&rc_ctrl[TEMP].rc.rocker_l_ + i)) > 660)
-            *(&rc_ctrl[TEMP].rc.rocker_l_ + i) = 0;
+    uint16_t value = 0;
+    for (uint8_t i = 0; i < bit_count; ++i)
+    {
+        uint16_t bit = bit_offset + i;
+        value |= (uint16_t)(((data[bit >> 3] >> (bit & 0x07U)) & 1U) << i);
+    }
+    return value;
 }
 
-/**
- * @brief 遥控器数据解析
- *
- * @param sbus_buf 接收buffer
- */
-static void sbus_to_rc(const uint8_t* sbus_buf)
+/* DJI example: reflected polynomial 0x8408, init 0xFFFF, no final XOR. */
+static uint16_t VT03CRC16(const uint8_t* data, uint16_t length)
 {
-    // 摇杆,直接解算时减去偏置
-    rc_ctrl[TEMP].rc.rocker_r_ = ((sbus_buf[0] | (sbus_buf[1] << 8)) & 0x07ff) - RC_CH_VALUE_OFFSET; //!< Channel 0
-    rc_ctrl[TEMP].rc.rocker_r1 = (((sbus_buf[1] >> 3) | (sbus_buf[2] << 5)) & 0x07ff) - RC_CH_VALUE_OFFSET;
-    //!< Channel 1
-    rc_ctrl[TEMP].rc.rocker_l_ = (((sbus_buf[2] >> 6) | (sbus_buf[3] << 2) | (sbus_buf[4] << 10)) & 0x07ff) -
-        RC_CH_VALUE_OFFSET; //!< Channel 2
-    rc_ctrl[TEMP].rc.rocker_l1 = (((sbus_buf[4] >> 1) | (sbus_buf[5] << 7)) & 0x07ff) - RC_CH_VALUE_OFFSET;
-    //!< Channel 3
-    rc_ctrl[TEMP].rc.dial = ((sbus_buf[16] | (sbus_buf[17] << 8)) & 0x07FF) - RC_CH_VALUE_OFFSET; // 左侧拨轮
-    RectifyRCjoystick();
-    // 开关,0左1右
-    rc_ctrl[TEMP].rc.switch_right = ((sbus_buf[5] >> 4) & 0x0003); //!< Switch right
-    rc_ctrl[TEMP].rc.switch_left = ((sbus_buf[5] >> 4) & 0x000C) >> 2; //!< Switch left
+    uint16_t crc = 0xFFFFU;
+    for (uint16_t i = 0; i < length; ++i)
+    {
+        crc ^= data[i];
+        for (uint8_t bit = 0; bit < 8; ++bit)
+            crc = (crc & 1U) ? (uint16_t)((crc >> 1) ^ 0x8408U) : (uint16_t)(crc >> 1);
+    }
+    return crc;
+}
 
-    // 鼠标解析
-    rc_ctrl[TEMP].mouse.x = (sbus_buf[6] | (sbus_buf[7] << 8)); //!< Mouse X axis
-    rc_ctrl[TEMP].mouse.y = (sbus_buf[8] | (sbus_buf[9] << 8)); //!< Mouse Y axis
-    rc_ctrl[TEMP].mouse.press_l = sbus_buf[12]; //!< Mouse Left Is Press ?
-    rc_ctrl[TEMP].mouse.press_r = sbus_buf[13]; //!< Mouse Right Is Press ?
-
-    //  位域的按键值解算,直接memcpy即可,注意小端低字节在前,即lsb在第一位,msb在最后
-    *(uint16_t*)&rc_ctrl[TEMP].key[KEY_PRESS] = (uint16_t)(sbus_buf[14] | (sbus_buf[15] << 8));
-    if (rc_ctrl[TEMP].key[KEY_PRESS].ctrl) // ctrl键按下，则将当前遥控器数据按键相关更新至KEY_PRESS_WITH_CTRL 否则清零 下同
+static void VT03UpdateKeyState(uint16_t key_now)
+{
+    uint16_t key_last = rc_ctrl[LAST].key[KEY_PRESS].keys;
+    rc_ctrl[TEMP].key[KEY_PRESS].keys = key_now;
+    if (rc_ctrl[TEMP].key[KEY_PRESS].ctrl)
         rc_ctrl[TEMP].key[KEY_PRESS_WITH_CTRL] = rc_ctrl[TEMP].key[KEY_PRESS];
     else
         memset(&rc_ctrl[TEMP].key[KEY_PRESS_WITH_CTRL], 0, sizeof(Key_t));
-    if (rc_ctrl[TEMP].key[KEY_PRESS].shift) // shift键按下
+    if (rc_ctrl[TEMP].key[KEY_PRESS].shift)
         rc_ctrl[TEMP].key[KEY_PRESS_WITH_SHIFT] = rc_ctrl[TEMP].key[KEY_PRESS];
     else
         memset(&rc_ctrl[TEMP].key[KEY_PRESS_WITH_SHIFT], 0, sizeof(Key_t));
 
-    uint16_t key_now = rc_ctrl[TEMP].key[KEY_PRESS].keys, // 当前按键是否按下
-             key_last = rc_ctrl[LAST].key[KEY_PRESS].keys, // 上一次按键是否按下
-             key_with_ctrl = rc_ctrl[TEMP].key[KEY_PRESS_WITH_CTRL].keys, // 当前ctrl组合键是否按下
-             key_with_shift = rc_ctrl[TEMP].key[KEY_PRESS_WITH_SHIFT].keys, //  当前shift组合键是否按下
-             key_last_with_ctrl = rc_ctrl[LAST].key[KEY_PRESS_WITH_CTRL].keys, // 上一次ctrl组合键是否按下
-             key_last_with_shift = rc_ctrl[LAST].key[KEY_PRESS_WITH_SHIFT].keys; // 上一次shift组合键是否按下
-
-    for (uint16_t i = 0, j = 0x1; i < 16; j <<= 1, i++)//位运算遍历key 数组 每一位
+    for (uint8_t i = 0; i < 16; ++i)
     {
-        if (i == 4 || i == 5) // 4,5位为ctrl和shift,直接跳过
+        uint16_t mask = (uint16_t)(1U << i);
+        if (i == 4U || i == 5U)
             continue;
-        // 如果当前按键按下,上一次按键没有按下,且ctrl和shift组合键没有按下,则按键按下计数加1(检测到上升沿)
-        if ((key_now & j) && !(key_last & j) && !(key_with_ctrl & j) && !(key_with_shift & j))
-            rc_ctrl[TEMP].key_count[KEY_PRESS][i]++;
-        // 当前ctrl组合键按下,上一次ctrl组合键没有按下,则ctrl组合键按下计数加1(检测到上升沿)
-        if ((key_with_ctrl & j) && !(key_last_with_ctrl & j))
-            rc_ctrl[TEMP].key_count[KEY_PRESS_WITH_CTRL][i]++;
-        // 当前shift组合键按下,上一次shift组合键没有按下,则shift组合键按下计数加1(检测到上升沿)
-        if ((key_with_shift & j) && !(key_last_with_shift & j))
-            rc_ctrl[TEMP].key_count[KEY_PRESS_WITH_SHIFT][i]++;
+        if ((key_now & mask) && !(key_last & mask) &&
+            !(rc_ctrl[TEMP].key[KEY_PRESS_WITH_CTRL].keys & mask) &&
+            !(rc_ctrl[TEMP].key[KEY_PRESS_WITH_SHIFT].keys & mask))
+            ++rc_ctrl[TEMP].key_count[KEY_PRESS][i];
+        if ((rc_ctrl[TEMP].key[KEY_PRESS_WITH_CTRL].keys & mask) &&
+            !(rc_ctrl[LAST].key[KEY_PRESS_WITH_CTRL].keys & mask))
+            ++rc_ctrl[TEMP].key_count[KEY_PRESS_WITH_CTRL][i];
+        if ((rc_ctrl[TEMP].key[KEY_PRESS_WITH_SHIFT].keys & mask) &&
+            !(rc_ctrl[LAST].key[KEY_PRESS_WITH_SHIFT].keys & mask))
+            ++rc_ctrl[TEMP].key_count[KEY_PRESS_WITH_SHIFT][i];
+    }
+}
+
+static uint8_t VT03DecodeFrame(const uint8_t* frame)
+{
+    uint16_t channel_raw[4];
+    if (frame[0] != 0xA9U || frame[1] != 0x53U)
+        return 0;
+
+    /* Save header-matched candidates, including CRC failures, for diagnosis. */
+    for (uint8_t i = 0; i < VT03_FRAME_SIZE; ++i)
+        vt03_raw_frame[i] = frame[i];
+    uint16_t received_crc = (uint16_t)frame[19] | ((uint16_t)frame[20] << 8);
+    uint16_t calculated_crc = VT03CRC16(frame, VT03_CRC_DATA_SIZE);
+    vt03_received_crc = received_crc;
+    vt03_calculated_crc = calculated_crc;
+    if (received_crc != calculated_crc)
+    {
+        ++vt03_crc_error_count;
+        return 0;
     }
 
-    memcpy(&rc_ctrl[LAST], &rc_ctrl[TEMP], sizeof(RC_ctrl_t)); // 保存上一次的数据,用于按键持续按下和切换的判断
+    for (uint8_t i = 0; i < 4; ++i)
+    {
+        channel_raw[i] = VT03ReadBits(frame, (uint16_t)(16U + 11U * i), 11U);
+        if (channel_raw[i] < RC_CH_VALUE_MIN || channel_raw[i] > RC_CH_VALUE_MAX)
+            return 0;
+    }
+
+    memcpy(&rc_ctrl[TEMP], &rc_ctrl[LAST], sizeof(RC_ctrl_t));
+    rc_ctrl[TEMP].rc.rocker_r_ = (int16_t)channel_raw[0] - (int16_t)RC_CH_VALUE_OFFSET;
+    rc_ctrl[TEMP].rc.rocker_r1 = (int16_t)channel_raw[1] - (int16_t)RC_CH_VALUE_OFFSET;
+    rc_ctrl[TEMP].rc.rocker_l1 = (int16_t)channel_raw[2] - (int16_t)RC_CH_VALUE_OFFSET;
+    rc_ctrl[TEMP].rc.rocker_l_ = (int16_t)channel_raw[3] - (int16_t)RC_CH_VALUE_OFFSET;
+
+    rc_ctrl[TEMP].rc.mode_switch = (uint8_t)VT03ReadBits(frame, 60U, 2U);
+    rc_ctrl[TEMP].rc.pause = (uint8_t)VT03ReadBits(frame, 62U, 1U);
+    rc_ctrl[TEMP].rc.custom_button_left = (uint8_t)VT03ReadBits(frame, 63U, 1U);
+    rc_ctrl[TEMP].rc.custom_button_right = (uint8_t)VT03ReadBits(frame, 64U, 1U);
+    rc_ctrl[TEMP].rc.dial = (int16_t)VT03ReadBits(frame, 65U, 11U) - (int16_t)RC_CH_VALUE_OFFSET;
+    rc_ctrl[TEMP].rc.trigger_button = (uint8_t)VT03ReadBits(frame, 76U, 1U);
+
+    /* Map VT03's C/N/S switch to the existing command-layer switch convention. */
+    if (rc_ctrl[TEMP].rc.mode_switch == 0U || rc_ctrl[TEMP].rc.pause)
+        rc_ctrl[TEMP].rc.switch_right = RC_SW_UP;   // C / pause: emergency stop
+    else if (rc_ctrl[TEMP].rc.mode_switch == 1U)
+        rc_ctrl[TEMP].rc.switch_right = RC_SW_MID;  // N: sticks
+    else if (rc_ctrl[TEMP].rc.mode_switch == 2U)
+        rc_ctrl[TEMP].rc.switch_right = RC_SW_DOWN; // S: keyboard/mouse
+    else
+        return 0;
+    rc_ctrl[TEMP].rc.switch_left = RC_SW_UP;
+
+    rc_ctrl[TEMP].mouse.x = (int16_t)VT03ReadBits(frame, 80U, 16U);
+    rc_ctrl[TEMP].mouse.y = (int16_t)VT03ReadBits(frame, 96U, 16U);
+    rc_ctrl[TEMP].mouse.press_l = (uint8_t)VT03ReadBits(frame, 128U, 2U);
+    rc_ctrl[TEMP].mouse.press_r = (uint8_t)VT03ReadBits(frame, 130U, 2U);
+    VT03UpdateKeyState(VT03ReadBits(frame, 136U, 16U));
+
+    for (uint8_t i = 0; i < 4; ++i)
+        vt03_channel_value[i] = (int16_t)channel_raw[i] - (int16_t)RC_CH_VALUE_OFFSET;
+    memcpy(&rc_ctrl[LAST], &rc_ctrl[TEMP], sizeof(RC_ctrl_t));
+    ++vt03_valid_frame_count;
+    return 1;
 }
 
-/**
- * @brief 对sbus_to_rc的简单封装,用于注册到bsp_usart的回调函数中
- *
- */
-static void RemoteControlRxCallback()
+static void RemoteControlRxCallback(void)
 {
-    DaemonReload(rc_daemon_instance); // 先喂狗
-    sbus_to_rc(rc_usart_instance->recv_buff); // 进行协议解析
+    if (VT03DecodeFrame(rc_usart_instance->recv_buff))
+        DaemonReload(rc_daemon_instance);
 }
 
-/**
- * @brief 遥控器离线的回调函数,注册到守护进程中,串口掉线时调用
- *
- */
 static void RCLostCallback(void* id)
 {
-    memset(rc_ctrl, 0, sizeof(rc_ctrl)); // 清空遥控器数据
-    USARTServiceInit(rc_usart_instance); // 尝试重新启动接收
-    LOGWARNING("[rc] remote control lost");
+    (void)id;
+    memset(rc_ctrl, 0, sizeof(rc_ctrl));
+    USARTServiceInit(rc_usart_instance);
+    LOGWARNING("[rc] VT03 remote control lost");
 }
 
 RC_ctrl_t* RemoteControlInit(UART_HandleTypeDef* rc_usart_handle)
 {
-    USART_Init_Config_s conf;
-    conf.module_callback = RemoteControlRxCallback;
-    conf.usart_handle = rc_usart_handle;
-    conf.recv_buff_size = REMOTE_CONTROL_FRAME_SIZE;
+    USART_Init_Config_s conf = {
+        .module_callback = RemoteControlRxCallback,
+        .usart_handle = rc_usart_handle,
+        .recv_buff_size = REMOTE_CONTROL_FRAME_SIZE,
+    };
     rc_usart_instance = USARTRegister(&conf);
 
-    // 进行守护进程的注册,用于定时检查遥控器是否正常工作
     Daemon_Init_Config_s daemon_conf = {
-        .reload_count = 10, // 100ms未收到数据视为离线,遥控器的接收频率实际上是1000/14Hz(大约70Hz)
+        .reload_count = 10,
         .callback = RCLostCallback,
-        .owner_id = NULL, // 只有1个遥控器,不需要owner_id
+        .owner_id = rc_usart_instance,
     };
     rc_daemon_instance = DaemonRegister(&daemon_conf);
-
     rc_init_flag = 1;
     return rc_ctrl;
 }
 
-uint8_t RemoteControlIsOnline()
+uint8_t RemoteControlIsOnline(void)
 {
-    if (rc_init_flag)
-        return DaemonIsOnline(rc_daemon_instance);
-    return 0;
+    return rc_init_flag ? DaemonIsOnline(rc_daemon_instance) : 0U;
 }
