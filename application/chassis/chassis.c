@@ -186,12 +186,14 @@ void ChassisTask()
         break;
     }
 
-    // 根据云台和底盘的角度offset将控制量映射到底盘坐标系上
+    // 根据云台和底盘的角度offset将控制量映射到底盘坐标系上。
+    // 实测表明云台顺时针转 +offset 时，底盘“前”命令方向应为 -offset，
+    // 因此这里将云台系控制量按 -offset 投影到底盘系；反馈速度投影仍使用上面的正向角度。
     // 底盘逆时针旋转为角度正方向;云台命令的方向以云台指向的方向为x,采用右手系(x指向正北时y在正东)
     cos_theta = arm_cos_f32(chassis_cmd_recv.offset_angle * DEGREE_2_RAD);
     sin_theta = arm_sin_f32(chassis_cmd_recv.offset_angle * DEGREE_2_RAD);
-    chassis_vx = chassis_cmd_recv.vx * cos_theta - chassis_cmd_recv.vy * sin_theta;//chassis_cmd_recv 是云台坐标系下 操作手坐标系（云台坐标系）
-    chassis_vy = chassis_cmd_recv.vx * sin_theta + chassis_cmd_recv.vy * cos_theta;
+    chassis_vx = chassis_cmd_recv.vx * cos_theta + chassis_cmd_recv.vy * sin_theta;//chassis_cmd_recv 是云台坐标系下的操作手坐标系
+    chassis_vy = -chassis_cmd_recv.vx * sin_theta + chassis_cmd_recv.vy * cos_theta;
 
     // 根据控制模式进行正运动学解算,计算底盘输出
     Calculate();
