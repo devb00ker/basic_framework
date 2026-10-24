@@ -41,15 +41,6 @@
 #define switch_is_mid(s) (s == RC_SW_MID)
 #define switch_is_up(s) (s == RC_SW_UP)
 
-// referee system
-// Gear
-#define REFEREE_GEAR_C 0
-#define REFEREE_GEAR_N 1
-#define REFEREE_GEAR_S 2
-//Button
-#define HAVEN_PRRESSED 1
-#define UNHAVEN_PRRESSED 0
-
 /* ----------------------- PC Key Definition-------------------------------- */
 // 对应key[x][0~16],获取对应的键;例如通过key[KEY_PRESS][Key_W]获取W键是否按下,后续改为位域后删除
 #define Key_W 0
@@ -108,6 +99,11 @@ typedef struct
 
         uint8_t switch_left;  // 左侧开关
         uint8_t switch_right; // 右侧开关
+        uint8_t mode_switch;  // VT03模式挡位: C=0, N=1, S=2
+        uint8_t pause;        // VT03暂停键
+        uint8_t custom_button_left;
+        uint8_t custom_button_right;
+        uint8_t trigger_button;
     } rc;
     struct
     {
@@ -127,7 +123,7 @@ typedef struct
 /**
  * @brief 初始化遥控器,该函数会将遥控器注册到串口
  *
- * @attention 注意分配正确的串口硬件,遥控器在C板上使用USART3
+ * @attention VT03接C板丝印UART2时使用USART1，以调用时传入的句柄为准
  *
  */
 RC_ctrl_t *RemoteControlInit(UART_HandleTypeDef *rc_usart_handle);
@@ -138,37 +134,13 @@ RC_ctrl_t *RemoteControlInit(UART_HandleTypeDef *rc_usart_handle);
  * @return uint8_t 1:在线 0:离线
  */
 uint8_t RemoteControlIsOnline();
-/* -------------------------  RefereeControl  -----------------------------------*/
-typedef struct
-{
-    struct
-    {
-        int16_t rocker_r_;              //  右水平通 通道0 左侧官方有误
-        int16_t rocker_r1;              //  右竖直 通道1
-        int16_t rocker_l_;              //  左水平 通道2
-        int16_t rocker_l1;              //  左竖直 通道3
-        uint8_t switch_gear;            //  C:0 N:1 S:2
-        uint8_t pause_press;            //  暂停按键
-        uint8_t custom_button_left;     //  自定义按键 左
-        uint8_t custom_button_right;    //  自定义按键 右
-        int16_t dial;                   //  拨轮
-        uint8_t trigger_button;         //  扳机键
-    } rc;
-    struct
-    {
-        int16_t x;                      //左右
-        int16_t y;                      //前后
-        int16_t z;                      //滚轮
-        uint8_t press_l;                //左
-        uint8_t press_r;                //右
-        uint8_t press_mid;              //中
-    } mouse;
-    Key_t key[3]; // 改为位域后的键盘索引,空间减少8倍  ,速度增加16~倍
 
-    uint8_t key_count[3][16];
-} RC_Referee_ctrl_t;
-
-RC_Referee_ctrl_t *RemoteControl_Referee_Init(UART_HandleTypeDef *rc_usart_handle);
-uint8_t RemoteControl_Referee_IsOnline();
+/* 调试观察量：最近帧头匹配候选帧（可能CRC失败）、CRC和有效通道值 */
+extern volatile uint32_t vt03_valid_frame_count;
+extern volatile uint32_t vt03_crc_error_count;
+extern volatile uint16_t vt03_received_crc;
+extern volatile uint16_t vt03_calculated_crc;
+extern volatile uint8_t vt03_raw_frame[21];
+extern volatile int16_t vt03_channel_value[4];
 
 #endif

@@ -77,11 +77,32 @@ __attribute__((noreturn)) void StartMOTORTASK(void const *argument)
 {
     static float motor_dt;
     static float motor_start;
+    uint32_t led_last_toggle_tick;
+    GPIO_InitTypeDef led_gpio_init = {0};
+
+    // PH11 is the board's green status LED (TIM5_CH2 by default). Reuse it as
+    // a GPIO heartbeat; TIM5 PWM channels are not started elsewhere in this project.
+    __HAL_RCC_GPIOH_CLK_ENABLE();
+    led_gpio_init.Pin = LED_G_Pin;
+    led_gpio_init.Mode = GPIO_MODE_OUTPUT_PP;
+    led_gpio_init.Pull = GPIO_NOPULL;
+    led_gpio_init.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(LED_G_GPIO_Port, &led_gpio_init);
+    HAL_GPIO_WritePin(LED_G_GPIO_Port, LED_G_Pin, GPIO_PIN_RESET);
+    led_last_toggle_tick = HAL_GetTick();
+
     LOGINFO("[freeRTOS] MOTOR Task Start");
     for (;;)
     {
         motor_start = DWT_GetTimeline_ms();
         MotorControlTask();
+        // Toggle every 500 ms (about 1 Hz full on/off cycle). Since this is
+        // inside the motor task, a frozen MotorControlTask stops the heartbeat.
+        if ((HAL_GetTick() - led_last_toggle_tick) >= 500U)
+        {
+            HAL_GPIO_TogglePin(LED_G_GPIO_Port, LED_G_Pin);
+            led_last_toggle_tick = HAL_GetTick();
+        }
         motor_dt = DWT_GetTimeline_ms() - motor_start;
         if (motor_dt > 1)
             LOGERROR("[freeRTOS] MOTOR Task is being DELAY! dt = [%f]", &motor_dt);
