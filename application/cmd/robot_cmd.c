@@ -92,10 +92,11 @@ static void RemoteControlSet()
 
     shoot_cmd_send.bullet_speed = SMALL_AMU_15;
     shoot_cmd_send.shoot_rate = 25;
-    gimbal_cmd_send.yaw -= 0.0007f * (float)rc_data[TEMP].rc.rocker_l_;
-    gimbal_cmd_send.pitch -= 0.001f * (float)rc_data[TEMP].rc.rocker_l1;
-    chassis_cmd_send.vx = 20.0f * chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_r_;
-    chassis_cmd_send.vy = -20.0f * chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_r1;
+    // 对调左右摇杆功能：右摇杆控制云台，左摇杆控制底盘（非美国手映射）。
+    gimbal_cmd_send.yaw -= 0.0007f * (float)rc_data[TEMP].rc.rocker_r_;
+    gimbal_cmd_send.pitch -= 0.0005f * (float)rc_data[TEMP].rc.rocker_r1;
+    chassis_cmd_send.vx = 20.0f * chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_l_;
+    chassis_cmd_send.vy = -20.0f * chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_l1;
 
     /* VT03 custom-right button holds visual aim; no target means retain manual gimbal control. */
     if (rc_data[TEMP].rc.custom_button_right && vision_recv_data->target_state != NO_TARGET)

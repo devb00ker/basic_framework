@@ -40,6 +40,10 @@
 #define RADIUS_WHEEL 77.5             // 轮子半径
 #define REDUCTION_RATIO_WHEEL 19.0f // 电机减速比,因为编码器量测的是转子的速度而不是输出轴的速度故需进行转换
 
+// 小陀螺目标旋转速度。原值4000实测约9.5 s/圈，按比例估算约1.2 s/圈。
+// 实车需架空底盘并逐步确认，若受功率/电机限幅影响，应现场回调此值。
+#define CHASSIS_ROTATE_WZ 31667.0f
+
 #define GYRO2GIMBAL_DIR_YAW 1   // 陀螺仪数据相较于云台的yaw的方向,1为相同,-1为相反
 #define GYRO2GIMBAL_DIR_PITCH 1 // 陀螺仪数据相较于云台的pitch的方向,1为相同,-1为相反
 #define GYRO2GIMBAL_DIR_ROLL 1  // 陀螺仪数据相较于云台的roll的方向,1为相同,-1为相反
