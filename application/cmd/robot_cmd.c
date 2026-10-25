@@ -97,11 +97,12 @@ static void RemoteControlSet()
     shoot_cmd_send.shoot_rate=100;//若为0拨弹盘设置为0
     //根据实际调整上两参数，调试用
 
-    // 遥控器[左]侧开关在[上]，遥控器控制云台
-    gimbal_cmd_send.yaw -= 0.05f * (float)rc_data[TEMP].rc.rocker_l_;
-    gimbal_cmd_send.pitch -= 0.01f * (float)rc_data[TEMP].rc.rocker_l1;
-    chassis_cmd_send.vx = (float)-((500.0f)*chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_r_);
-    chassis_cmd_send.vy = (float)((500.0f)*chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_r1);
+    // 速度系数对齐全向轮Omni_graduation_design_27new；保留麦轮左杆云台、右杆底盘及原方向。
+    // 只调整摇杆输入，不改变麦轮PID、运动学、键鼠和小陀螺参数。
+    gimbal_cmd_send.yaw -= 0.0007f * (float)rc_data[TEMP].rc.rocker_l_;
+    gimbal_cmd_send.pitch -= 0.0005f * (float)rc_data[TEMP].rc.rocker_l1;
+    chassis_cmd_send.vx = (float)-((20.0f)*chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_r_);
+    chassis_cmd_send.vy = (float)((20.0f)*chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_r1);
 
 
     // 与全向轮VT03映射一致：右自定义键请求视觉，左自定义键使能摩擦轮，扳机供弹。

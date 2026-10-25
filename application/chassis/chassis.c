@@ -180,7 +180,7 @@ void ChassisTask()
        // chassis_cmd_recv.wz = 1.5f * chassis_cmd_recv.offset_angle * abs(chassis_cmd_recv.offset_angle);
         break;
     case CHASSIS_ROTATE: // 自旋,同时保持全向机动;当前wz维持定值,后续增加不规则的变速策略
-        chassis_cmd_recv.wz = 4000;
+        chassis_cmd_recv.wz = 400.0f; // 麦轮小陀螺自旋指令降为原4000的1/10，不改变平移指令。
         break;
     default:
         break;
