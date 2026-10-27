@@ -5,6 +5,7 @@
 #include "message_center.h"
 #include "bsp_dwt.h"
 #include "general_def.h"
+#include <math.h>
 
 /* 对于双发射机构的机器人,将下面的数据封装成结构体即可,生成两份shoot应用实例 */
 static DJIMotorInstance *friction_l, *friction_r, *loader; // 拨盘电机
@@ -17,6 +18,145 @@ static Shoot_Upload_Data_s shoot_feedback_data; // 来自cmd的发射控制信�
 
 // dwt定时,计算冷却用
 static float hibernate_time = 0, dead_time = 0;
+
+/* 拨弹盘卡弹保护参数：M2006反馈的实际电流和编码器速度用于判断堵转。 */
+#define LOADER_JAM_CURRENT_THRESHOLD      1800.0f  // 正常约520，卡弹判定留出约3倍余量
+#define LOADER_JAM_SPEED_THRESHOLD        1200.0f
+#define LOADER_JAM_DETECT_TIME_MS           80.0f
+#define LOADER_JAM_STARTUP_IGNORE_TIME_MS 250.0f
+#define LOADER_RECOVER_REVERSE_TIME_MS     120.0f
+#define LOADER_RECOVER_PAUSE_TIME_MS        40.0f
+#define LOADER_RECOVER_FORWARD_TIME_MS     180.0f
+#define LOADER_RECOVER_COOLDOWN_TIME_MS    300.0f
+#define LOADER_RECOVER_REVERSE_RATIO         0.25f
+#define LOADER_RECOVER_MAX_ATTEMPTS            3U
+
+typedef enum
+{
+    LOADER_RECOVER_NORMAL = 0,
+    LOADER_RECOVER_REVERSE,
+    LOADER_RECOVER_PAUSE,
+    LOADER_RECOVER_FORWARD,
+    LOADER_RECOVER_COOLDOWN,
+    LOADER_RECOVER_LOCKOUT,
+} Loader_Recovery_State_e;
+
+/* 这些变量可直接在Ozone中观察，便于现场调参。 */
+static Loader_Recovery_State_e loader_recovery_state = LOADER_RECOVER_NORMAL;
+static uint8_t loader_recovery_attempts = 0;
+static float loader_jam_start_time = 0.0f;
+static float loader_recovery_start_time = 0.0f;
+static float loader_recovery_cooldown_start_time = 0.0f;
+static float loader_burst_start_time = 0.0f;
+static float loader_jam_current = 0.0f;
+static float loader_jam_speed = 0.0f;
+
+static void LoaderRecoveryReset(void)
+{
+    loader_recovery_state = LOADER_RECOVER_NORMAL;
+    loader_recovery_attempts = 0;
+    loader_jam_start_time = 0.0f;
+    loader_recovery_start_time = 0.0f;
+    loader_recovery_cooldown_start_time = 0.0f;
+    loader_burst_start_time = 0.0f;
+    loader_jam_current = 0.0f;
+    loader_jam_speed = 0.0f;
+}
+
+static void LoaderSetBurstfireRef(float forward_ref)
+{
+    const float now = DWT_GetTimeline_ms();
+    const float reverse_ref = -forward_ref * LOADER_RECOVER_REVERSE_RATIO;
+    const float current = fabsf((float)loader->measure.real_current);
+    const float speed = fabsf(loader->measure.speed_aps);
+    const uint8_t jam_condition = (fabsf(forward_ref) > 1000.0f) &&
+                                  (current >= LOADER_JAM_CURRENT_THRESHOLD) &&
+                                  (speed <= LOADER_JAM_SPEED_THRESHOLD);
+
+    loader_jam_current = current;
+    loader_jam_speed = speed;
+
+    if (loader_burst_start_time <= 0.0f)
+        loader_burst_start_time = now;
+
+    switch (loader_recovery_state)
+    {
+    case LOADER_RECOVER_NORMAL:
+        DJIMotorOuterLoop(loader, SPEED_LOOP);
+        DJIMotorSetRef(loader, forward_ref);
+        if (jam_condition && (now - loader_burst_start_time) >= LOADER_JAM_STARTUP_IGNORE_TIME_MS)
+        {
+            if (loader_jam_start_time <= 0.0f)
+                loader_jam_start_time = now;
+            else if ((now - loader_jam_start_time) >= LOADER_JAM_DETECT_TIME_MS)
+            {
+                loader_jam_start_time = 0.0f;
+                if (loader_recovery_attempts < LOADER_RECOVER_MAX_ATTEMPTS)
+                {
+                    loader_recovery_attempts++;
+                    loader_recovery_state = LOADER_RECOVER_REVERSE;
+                    loader_recovery_start_time = now;
+                }
+                else
+                {
+                    /* 多次修复失败后停盘，避免持续大电流损坏电机或电调。 */
+                    loader_recovery_state = LOADER_RECOVER_LOCKOUT;
+                }
+            }
+        }
+        else
+        {
+            loader_jam_start_time = 0.0f;
+        }
+        break;
+
+    case LOADER_RECOVER_REVERSE:
+        DJIMotorOuterLoop(loader, SPEED_LOOP);
+        DJIMotorSetRef(loader, reverse_ref);
+        if ((now - loader_recovery_start_time) >= LOADER_RECOVER_REVERSE_TIME_MS)
+        {
+            loader_recovery_state = LOADER_RECOVER_PAUSE;
+            loader_recovery_start_time = now;
+        }
+        break;
+
+    case LOADER_RECOVER_PAUSE:
+        DJIMotorOuterLoop(loader, SPEED_LOOP);
+        DJIMotorSetRef(loader, 0.0f);
+        if ((now - loader_recovery_start_time) >= LOADER_RECOVER_PAUSE_TIME_MS)
+        {
+            loader_recovery_state = LOADER_RECOVER_FORWARD;
+            loader_recovery_start_time = now;
+        }
+        break;
+
+    case LOADER_RECOVER_FORWARD:
+        DJIMotorOuterLoop(loader, SPEED_LOOP);
+        DJIMotorSetRef(loader, forward_ref);
+        if ((now - loader_recovery_start_time) >= LOADER_RECOVER_FORWARD_TIME_MS)
+        {
+            loader_recovery_state = LOADER_RECOVER_COOLDOWN;
+            loader_recovery_cooldown_start_time = now;
+        }
+        break;
+
+    case LOADER_RECOVER_COOLDOWN:
+        DJIMotorOuterLoop(loader, SPEED_LOOP);
+        DJIMotorSetRef(loader, forward_ref);
+        if ((now - loader_recovery_cooldown_start_time) >= LOADER_RECOVER_COOLDOWN_TIME_MS)
+        {
+            loader_recovery_state = LOADER_RECOVER_NORMAL;
+            loader_jam_start_time = 0.0f;
+        }
+        break;
+
+    case LOADER_RECOVER_LOCKOUT:
+    default:
+        DJIMotorOuterLoop(loader, SPEED_LOOP);
+        DJIMotorSetRef(loader, 0.0f);
+        break;
+    }
+}
 
 void ShootInit()
 {
@@ -114,6 +254,7 @@ void ShootTask()
     // 对shoot mode等于SHOOT_STOP的情况特殊处理,直接停止所有电机(紧急停止)
     if (shoot_cmd_recv.shoot_mode == SHOOT_OFF)
     {
+        LoaderRecoveryReset();
         DJIMotorStop(friction_l);
         DJIMotorStop(friction_r);
         DJIMotorStop(loader);
@@ -135,11 +276,13 @@ void ShootTask()
     {
     // 停止拨盘
     case LOAD_STOP:
+        LoaderRecoveryReset();
         DJIMotorOuterLoop(loader, SPEED_LOOP); // 切换到速度环
         DJIMotorSetRef(loader, 0); // 同时设定参考值为0,这样停止的速度最快
         break;
     // 单发模式,根据鼠标按下的时间,触发一次之后需要进入不响应输入的状态(否则按下的时间内可能多次进入,导致多次发射)
     case LOAD_1_BULLET: // 激活能量机关/干扰对方用,英雄用.
+        LoaderRecoveryReset();
         DJIMotorOuterLoop(loader, ANGLE_LOOP); // 切换到角度环
         DJIMotorSetRef(loader, loader->measure.total_angle + ONE_BULLET_DELTA_ANGLE); // 控制量增加一发弹丸的角度
         hibernate_time = DWT_GetTimeline_ms(); // 记录触发指令的时间
@@ -147,6 +290,7 @@ void ShootTask()
         break;
     // 三连发,如果不需要后续可能删除
     case LOAD_3_BULLET:
+        LoaderRecoveryReset();
         DJIMotorOuterLoop(loader, ANGLE_LOOP); // 切换到速度环
         DJIMotorSetRef(loader, loader->measure.total_angle + 3 * ONE_BULLET_DELTA_ANGLE); // 增加3发
         hibernate_time = DWT_GetTimeline_ms(); // 记录触发指令的时间
@@ -154,15 +298,15 @@ void ShootTask()
         break;
     // 连发模式,对速度闭环,射频后续修改为可变,目前固定为1Hz
     case LOAD_BURSTFIRE:
-        DJIMotorOuterLoop(loader, SPEED_LOOP);
-        DJIMotorSetRef(loader, shoot_cmd_recv.shoot_rate * 360 * REDUCTION_RATIO_LOADER / 8);
+        LoaderSetBurstfireRef(shoot_cmd_recv.shoot_rate * 360 * REDUCTION_RATIO_LOADER / 8);
     // x颗/秒换算成速度: 已知一圈的载弹量,由此计算出1s需要转的角度,注意换算角速度(DJIMotor的速度单位是angle per second)
         break;
     // 拨盘反转,对速度闭环,后续增加卡弹检测(通过裁判系统剩余热量反馈和电机电流)
     // 也有可能需要从switch-case中独立出来
     case LOAD_REVERSE:
+        LoaderRecoveryReset();
         DJIMotorOuterLoop(loader, SPEED_LOOP);
-    // ...
+        DJIMotorSetRef(loader, -1000.0f);
         break;
     default:
         while (1); // 未知模式,停止运行,检查指针越界,内存溢出等问题
