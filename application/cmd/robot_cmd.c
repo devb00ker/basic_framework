@@ -98,12 +98,7 @@ static void RemoteControlSet()
     chassis_cmd_send.vx = 20.0f * chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_l_;
     chassis_cmd_send.vy = -20.0f * chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_l1;
 
-    /* VT03 custom-right button holds visual aim; no target means retain manual gimbal control. */
-    if (rc_data[TEMP].rc.custom_button_right && vision_recv_data->target_state != NO_TARGET)
-    {
-        gimbal_cmd_send.yaw = vision_recv_data->yaw;
-        gimbal_cmd_send.pitch = vision_recv_data->pitch;
-    }
+    /* 当前版本禁用自瞄，云台始终由右摇杆手动控制。 */
 
     /* Safe hold-to-run mapping: custom-left enables friction; trigger feeds only while held. */
     if (rc_data[TEMP].rc.custom_button_left)
@@ -137,7 +132,8 @@ static void MouseKeyControlSet()
 {
     chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
     gimbal_cmd_send.gimbal_mode = GIMBAL_GYRO_MODE;
-    shoot_cmd_send.shoot_mode= SHOOT_ON;
+    // 键鼠模式进入时默认关闭发射机构；只有 F 开启摩擦轮后才使能发射电机。
+    shoot_cmd_send.shoot_mode= SHOOT_OFF;
     shoot_cmd_send.bullet_speed=SMALL_AMU_15;//default in switch start
     shoot_cmd_send.shoot_rate=100;//若为0拨弹盘设置为0
     //根据实际调整上两参数，调试用
@@ -145,26 +141,19 @@ static void MouseKeyControlSet()
     // 底盘和云台控制可能需要添加系数
     /************************* chassis&gimbal ************************/
     chassis_cmd_send.vx = -(float)((rc_data[TEMP].key[KEY_PRESS].a - rc_data[TEMP].key[KEY_PRESS].d)*(25*chassis_remote_ratio * 660));
-    chassis_cmd_send.vy = (float)((rc_data[TEMP].key[KEY_PRESS].w - rc_data[TEMP].key[KEY_PRESS].s)*(25*chassis_remote_ratio * 660));
+    // 当前底盘坐标定义下，W 为前进、S 为后退。
+    chassis_cmd_send.vy = -(float)((rc_data[TEMP].key[KEY_PRESS].w - rc_data[TEMP].key[KEY_PRESS].s)*(25*chassis_remote_ratio * 660));
     gimbal_cmd_send.yaw -= (float)rc_data[TEMP].mouse.x * 0.05f;
     gimbal_cmd_send.pitch -= (float)rc_data[TEMP].mouse.y * 0.01f;
 
-    if(rc_data[TEMP].key[KEY_PRESS].q){
+    // Q 使用按下次数切换小陀螺，而不是要求一直按住。
+    if(rc_data[TEMP].key_count[KEY_PRESS][Key_Q] % 2U){
         chassis_cmd_send.chassis_mode = CHASSIS_ROTATE;
     }
     else {
         chassis_cmd_send.chassis_mode = CHASSIS_FOLLOW_GIMBAL_YAW;
     }
-    /************************* auto_aim ************************/
-    if (rc_data[TEMP].mouse.press_r)
-    {
-        // 按住鼠标右键，视觉控制云台
-        if (vision_recv_data->target_state != NO_TARGET)
-        {
-            gimbal_cmd_send.yaw = vision_recv_data->yaw;
-            gimbal_cmd_send.pitch = vision_recv_data->pitch;
-        }
-    }
+    /* 当前版本禁用自瞄，鼠标右键不再接管云台。 */
     /************************* 摩擦轮 ************************/
     switch (rc_data[TEMP].key_count[KEY_PRESS][Key_F] % 2)
     {
@@ -176,49 +165,14 @@ static void MouseKeyControlSet()
         shoot_cmd_send.friction_mode = FRICTION_ON;
         break;
     }
-    /************************* shift aim_mode ************************/
-    switch (rc_data[TEMP].key_count[KEY_PRESS][Key_X] % 2)
-    {
-    // X切换自瞄射击模式，
-    case 0:
-        vision_recv_data->fire_mode = AUTO_AIM;
-        break;
-    default:
-        vision_recv_data->fire_mode = AUTO_FIRE;
-        break;
-        }
-    /************************* load(constrain:friction on) ************************/ //自瞄部分逻辑待调整
-    if (shoot_cmd_send.friction_mode == FRICTION_ON)
-    {
-        // 左键单击
-        switch (rc_data[TEMP].mouse.press_l)
-        {
-        case 0:
-            shoot_cmd_send.load_mode = LOAD_STOP;
-            break;
-        default:
-            if (!rc_data[TEMP].mouse.press_r || vision_recv_data->target_state == NO_TARGET)
-            {
-                shoot_cmd_send.load_mode = LOAD_1_BULLET;
-            }
-            else//先右键后左键
-            {
-                if (vision_recv_data->fire_mode == AUTO_AIM)//自瞄单发  打符||精确射击
-                {
-                    shoot_cmd_send.load_mode = LOAD_1_BULLET;
-                }
-                else if (vision_recv_data->fire_mode == AUTO_FIRE)//自瞄连射 长摁
-                {
-                    shoot_cmd_send.load_mode = vision_recv_data->target_state == READY_TO_FIRE ? LOAD_BURSTFIRE : LOAD_STOP;//READY_TO_FIRE来自上位机
-                }
-            }
-            break;
-        }
-    }
+    // 摩擦轮关闭时同时关闭发射机构，避免进入 S 挡后电机被无条件使能。
+    shoot_cmd_send.shoot_mode = (shoot_cmd_send.friction_mode == FRICTION_ON) ? SHOOT_ON : SHOOT_OFF;
+    /************************* load(constrain: friction on) ************************/
+    /* 禁用自瞄和 LOAD_1_BULLET：摩擦轮开启后，鼠标左键只执行手动连发。 */
+    if (shoot_cmd_send.friction_mode == FRICTION_ON && rc_data[TEMP].mouse.press_l != 0U)
+        shoot_cmd_send.load_mode = LOAD_BURSTFIRE;
     else
-    {
         shoot_cmd_send.load_mode = LOAD_STOP;
-    }
     /**************************超级电容 shift 加速*************************/
     if (rc_data[TEMP].key[KEY_PRESS].shift)
     {
