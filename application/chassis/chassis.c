@@ -24,6 +24,7 @@
 #include "arm_math.h"
 #include "chassis_math.h"
 #include "chassis_tuning.h"
+#include "power_limit_math.h"
 
 /* 根据robot_def.h中的macro自动计算的参数 */
 #define HALF_WHEEL_BASE (WHEEL_BASE / 2.0f)     // 半轴距
@@ -53,6 +54,8 @@ static float vx, vy, wz;//正向解算 出的底盘姿态
 volatile Chassis_Debug_s chassis_debug;
 static float ramp_vx, ramp_vy, ramp_wz;
 static uint32_t chassis_last_tick;
+static float power_budget_w = CHASSIS_DEFAULT_POWER_W;
+static float last_valid_limit_w = CHASSIS_DEFAULT_POWER_W;
 
 void ChassisInit()
 {
@@ -113,10 +116,19 @@ void ChassisInit()
  */
 static void Calculate()
 {
-    vt_lf = ((-chassis_vx + chassis_vy)/sqrt_2 + chassis_cmd_recv.wz * LF_CENTER)/RADIUS_WHEEL;  //1  四个电机都正转因此 在此处做了 处理 理论上 应该设置 两侧电机旋转方向相反  mm/s
-    vt_rf = ((chassis_vx + chassis_vy )/sqrt_2 -chassis_cmd_recv.wz * RF_CENTER)/RADIUS_WHEEL;  //2
-    vt_lb = ((-chassis_vx - chassis_vy)/sqrt_2 - chassis_cmd_recv.wz * LB_CENTER)/RADIUS_WHEEL;  //4
-    vt_rb = ((chassis_vx - chassis_vy )/sqrt_2 + chassis_cmd_recv.wz * RB_CENTER)/RADIUS_WHEEL;  //3
+    const float t[4] = {(-chassis_vx + chassis_vy) / (sqrt_2 * RADIUS_WHEEL),
+                       ( chassis_vx + chassis_vy) / (sqrt_2 * RADIUS_WHEEL),
+                       (-chassis_vx - chassis_vy) / (sqrt_2 * RADIUS_WHEEL),
+                       ( chassis_vx - chassis_vy) / (sqrt_2 * RADIUS_WHEEL)};
+    const float r[4] = {chassis_cmd_recv.wz * LF_CENTER / RADIUS_WHEEL,
+                      -chassis_cmd_recv.wz * RF_CENTER / RADIUS_WHEEL,
+                      -chassis_cmd_recv.wz * LB_CENTER / RADIUS_WHEEL,
+                       chassis_cmd_recv.wz * RB_CENTER / RADIUS_WHEEL};
+    float wheel[4], translation_scale;
+    chassis_debug.spin_scale = ChassisMixWheels(t, r, CHASSIS_WHEEL_MAX_RPM,
+                                CHASSIS_SPIN_TRANSLATION_SHARE, wheel, &translation_scale);
+    chassis_debug.translation_scale = translation_scale;
+    vt_lf = wheel[0]; vt_rf = wheel[1]; vt_lb = wheel[2]; vt_rb = wheel[3];
 }
 
 /**
@@ -125,8 +137,25 @@ static void Calculate()
  */
 static void LimitChassisOutput()
 {
-    SetPowerLimit(referee_data->GameRobotState.chassis_power_limit);
-    // referee_data->PowerHeatData.chassis_power_buffer;
+    RefereePowerSnapshot ref;
+    RefereeGetPowerSnapshot(&ref);
+    uint32_t now = HAL_GetTick();
+    int status_fresh = PowerDataFresh(now, ref.status_tick, ref.status_seen, CHASSIS_STATUS_TIMEOUT_MS) &&
+                       ref.limit_w > 0 && ref.limit_w <= CHASSIS_MAX_ACCEPTED_POWER_W;
+    int power_fresh = PowerDataFresh(now, ref.power_tick, ref.power_seen, CHASSIS_POWER_TIMEOUT_MS) &&
+                      isfinite(ref.measured_w) && ref.measured_w >= 0.0f;
+    if (status_fresh) last_valid_limit_w = ref.limit_w;
+    float base = status_fresh ? ref.limit_w : fminf(CHASSIS_DEFAULT_POWER_W, last_valid_limit_w);
+    float target = PowerBudget(base, ref.buffer_j, status_fresh && power_fresh,
+                               CHASSIS_BUFFER_FULL_J, CHASSIS_BUFFER_MIN_RATIO);
+    power_budget_w = PowerBudgetSlew(power_budget_w, target, CHASSIS_POWER_RISE_WPS, chassis_debug.dt_s);
+    SetPowerLimit(power_budget_w);
+    chassis_debug.referee_status_fresh = status_fresh;
+    chassis_debug.referee_power_fresh = power_fresh;
+    chassis_debug.power_target_w = target;
+    chassis_debug.power_budget_w = power_budget_w;
+    chassis_debug.referee_measured_w = power_fresh ? ref.measured_w : 0.0f;
+    chassis_debug.buffer_j = ref.buffer_j;
 
     float wheel[4] = {vt_lf, vt_rf, vt_lb, vt_rb};
     chassis_debug.wheel_scale = ChassisScaleWheels(wheel, CHASSIS_WHEEL_MAX_RPM);

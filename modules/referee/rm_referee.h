@@ -95,6 +95,15 @@ typedef struct
  */
 referee_info_t *RefereeInit(UART_HandleTypeDef *referee_usart_handle);
 
+typedef struct
+{
+    uint32_t status_tick, power_tick;
+    uint8_t status_seen, power_seen;
+    uint16_t limit_w, buffer_j;
+    float measured_w;
+} RefereePowerSnapshot;
+void RefereeGetPowerSnapshot(RefereePowerSnapshot *snapshot);
+
 /**
  * @brief UI绘制和交互数的发送接口,由UI绘制任务和多机通信函数调用
  * @note 内部包含了一个实时系统的延时函数,这是因为裁判系统接收CMD数据至高位10Hz

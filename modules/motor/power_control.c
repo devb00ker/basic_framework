@@ -19,6 +19,7 @@ static float A, B, C; // 测试用
 static float power_control_out[4], initial_give_power[4]; // 电机输出功率
 static float chassis_max_power = CHASSIS_DEFAULT_POWER_W, initial_total_power = 0.0f;
 static float current_p;
+volatile PowerControl_Debug_s power_control_debug;
 /**
  * @brief 由于DJI电机发送以四个一组的形式进行,故对其进行特殊处理,用6个(2can*3group)can_instance专门负责发送
  *        该变量将在 DJIMotorControl() 中使用,分组在 MotorSenderGrouping()中进行
@@ -279,6 +280,10 @@ void PowerControl()
 
     initial_total_power = 0.0f; //预估总功率
     const uint32_t feedback_fault = PowerControlFeedbackFaultMask();
+    power_control_debug.tick_ms = HAL_GetTick();
+    power_control_debug.feedback_fault_mask = feedback_fault;
+    power_control_debug.saturated_mask = 0;
+    power_control_debug.budget_w = chassis_max_power;
 
     // 遍历所有电机实例,进行串级PID的计算并设置发送报文的值
     for (size_t i = 0; i < idx; ++i) // idx实际上是4个
@@ -289,10 +294,15 @@ void PowerControl()
         motor_controller = &motor->motor_controller;
         measure = &motor->measure;
         pid_ref = motor_controller->pid_ref; // 保存设定值,防止motor_controller->pid_ref在计算过程中被修改
+        float sign = motor_setting->motor_reverse_flag == MOTOR_DIRECTION_REVERSE ? -1.0f : 1.0f;
+        power_control_debug.target_rpm[i] = pid_ref;
+        power_control_debug.actual_rpm[i] = sign * measure->speed_aps / 6.0f;
+        power_control_debug.error_rpm[i] = pid_ref - power_control_debug.actual_rpm[i];
         if (feedback_fault || motor->stop_flag == MOTOR_STOP || !isfinite(pid_ref))
         {
             ClearWheelPID(&motor_controller->speed_PID);
             initial_torque[i] = initial_give_power[i] = power_control_out[i] = 0.0f;
+            power_control_debug.pid_current[i] = 0.0f;
             continue;
         }
         if (motor_setting->motor_reverse_flag == MOTOR_DIRECTION_REVERSE)
@@ -328,6 +338,7 @@ void PowerControl()
 
         // 获取最终输出
         power_control_out[i] = pid_ref;//若 未超功率则用当前的
+        power_control_debug.pid_current[i] = pid_ref;
     }
     for (uint8_t i = 0; i < idx; i++) //累加底盘电机功率
     {
@@ -338,6 +349,8 @@ void PowerControl()
         initial_total_power += initial_give_power[i];
     }
     current_p=initial_total_power;
+    power_control_debug.estimated_requested_w = current_p;
+    power_control_debug.allocation_ratio = current_p > chassis_max_power ? chassis_max_power / current_p : 1.0f;
     if (current_p > chassis_max_power) //若大于 限制功率 先缩目标功率 再根据功率方程反推出此时允许的输出力矩/电流
     {
         float ratio = chassis_max_power / current_p; // 根据允许的最大功率进行放缩
@@ -365,6 +378,10 @@ void PowerControl()
             power_control_out[i] = 0.0f;
         power_control_out[i] = fminf(15000.0f, fmaxf(-15000.0f, power_control_out[i]));
         set = (int16_t)power_control_out[i];
+        power_control_debug.applied_current[i] = motor->stop_flag == MOTOR_STOP ? 0.0f : set;
+        if (fabsf(power_control_debug.pid_current[i]) >= motor->motor_controller.speed_PID.MaxOut - 1.0f ||
+            fabsf(power_control_debug.pid_current[i] - power_control_debug.applied_current[i]) > 1.0f)
+            power_control_debug.saturated_mask |= 1U << i;
         group = motor->sender_group;
         num = motor->message_num;
         sender_assignment[group].tx_buff[2 * num] = (uint8_t)(set >> 8); // 低八位

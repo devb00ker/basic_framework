@@ -41,4 +41,12 @@ void PowerControl(void);
 void SetPowerLimit(float power_limit);
 /* 按PowerControlInit注册顺序：bit0 LF、bit1 RF、bit2 LB、bit3 RB。 */
 uint32_t PowerControlFeedbackFaultMask(void);
+typedef struct
+{
+    uint32_t tick_ms, feedback_fault_mask, saturated_mask;
+    float budget_w, estimated_requested_w, allocation_ratio;
+    float target_rpm[4], actual_rpm[4], error_rpm[4];
+    float pid_current[4], applied_current[4]; /* CAN原始电流指令，非安培 */
+} PowerControl_Debug_s;
+extern volatile PowerControl_Debug_s power_control_debug;
 #endif // !DJI_MOTOR_H

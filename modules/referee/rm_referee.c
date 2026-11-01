@@ -23,6 +23,22 @@
 static USARTInstance *referee_usart_instance; // 裁判系统串口实例
 static DaemonInstance *referee_daemon;		  // 裁判系统守护进程
 static referee_info_t referee_info;			  // 裁判系统数据
+static volatile uint32_t status_tick, power_tick;
+static volatile uint8_t status_seen, power_seen;
+
+void RefereeGetPowerSnapshot(RefereePowerSnapshot *snapshot)
+{
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    snapshot->status_tick = status_tick;
+    snapshot->power_tick = power_tick;
+    snapshot->status_seen = status_seen;
+    snapshot->power_seen = power_seen;
+    snapshot->limit_w = referee_info.GameRobotState.chassis_power_limit;
+    snapshot->buffer_j = referee_info.PowerHeatData.buffer_energy;
+    snapshot->measured_w = referee_info.PowerHeatData.chassis_power;
+    __set_PRIMASK(primask);
+}
 
 /**
  * @brief  读取裁判数据,中断中读取保证速度
@@ -30,10 +46,10 @@ static referee_info_t referee_info;			  // 裁判系统数据
  * @retval 是否对正误判断做处理
  * @attention  在此判断帧头和CRC校验,无误再写入数据，不重复判断帧头
  */
-static void JudgeReadData(uint8_t *buff)//指针
+static void JudgeReadData(uint8_t *buff, uint16_t available)
 {
 	uint16_t judge_length; // 统计一帧数据长度
-	if (buff == NULL)	   // 空数据包，则不作任何处理
+	if (buff == NULL || available < LEN_HEADER + LEN_CMDID + LEN_TAIL)
 		return;
 
 	// 写入帧头数据(5-byte),用于判断是否开始存储裁判数据
@@ -47,6 +63,8 @@ static void JudgeReadData(uint8_t *buff)//指针
 		{
 			// 统计一帧数据长度(byte),用于CR16校验
 			judge_length = referee_info.FrameHeader.DataLength + LEN_HEADER + LEN_CMDID + LEN_TAIL;//buff[DATA_LENGTH]
+			if (referee_info.FrameHeader.DataLength > available - LEN_HEADER - LEN_CMDID - LEN_TAIL)
+				return;
 			// 帧尾CRC16校验
 			if (Verify_CRC16_Check_Sum(buff, judge_length) == TRUE)
 			{
@@ -78,10 +96,14 @@ static void JudgeReadData(uint8_t *buff)//指针
                     memcpy(&referee_info.SupplyProjectileAction, (buff + DATA_Offset), LEN_dart_info);
                     break;
 				case ID_robot_status: // 0x0201
+					if (referee_info.FrameHeader.DataLength != LEN_robot_status) break;
 					memcpy(&referee_info.GameRobotState, (buff + DATA_Offset), LEN_robot_status);
+					status_tick = HAL_GetTick(); status_seen = 1;
 					break;
 				case ID_power_heat_data: // 0x0202
+					if (referee_info.FrameHeader.DataLength != LEN_power_heat_data) break;
 					memcpy(&referee_info.PowerHeatData, (buff + DATA_Offset), LEN_power_heat_data);
+					power_tick = HAL_GetTick(); power_seen = 1;
 					break;
 				case ID_robot_pos: // 0x0203
 					memcpy(&referee_info.GameRobotPos, (buff + DATA_Offset), LEN_robot_pos);
@@ -146,11 +168,8 @@ static void JudgeReadData(uint8_t *buff)//指针
 //需扩充自定义数据大小
                 }
 			}
-		}
-		// 首地址加帧长度,指向CRC16下一字节,用来判断是否为0xA5,从而判断一个数据包是否有多帧数据
-		if (*(buff + sizeof(xFrameHeader) + LEN_CMDID + referee_info.FrameHeader.DataLength + LEN_TAIL) == 0xA5)
-		{ // 如果一个数据包出现了多帧数据,则再次调用解析函数,直到所有数据包解析完毕
-			JudgeReadData(buff + sizeof(xFrameHeader) + LEN_CMDID + referee_info.FrameHeader.DataLength + LEN_TAIL);
+			if (available > judge_length && buff[judge_length] == REFEREE_SOF)
+				JudgeReadData(buff + judge_length, available - judge_length);
 		}
 	}
 }
@@ -159,7 +178,7 @@ static void JudgeReadData(uint8_t *buff)//指针
 static void RefereeRxCallback()
 {
 	DaemonReload(referee_daemon);
-	JudgeReadData(referee_usart_instance->recv_buff);
+	JudgeReadData(referee_usart_instance->recv_buff, referee_usart_instance->recv_len);
 }
 // 裁判系统丢失回调函数,重新初始化裁判系统串口
 static void RefereeLostCallback(void *arg)

@@ -14,6 +14,10 @@ typedef struct
     float wheel_ref_rpm[4];       /* 逻辑方向，已限幅 */
     float wheel_actual_rpm[4];    /* 已消除电机反向配置 */
     float wheel_scale;
+    float translation_scale, spin_scale;
+    uint32_t referee_status_fresh, referee_power_fresh;
+    float power_target_w, power_budget_w, referee_measured_w;
+    uint32_t buffer_j;
     float body_vx_mps, body_vy_mps, body_wz_radps;
 } Chassis_Debug_s;
 
