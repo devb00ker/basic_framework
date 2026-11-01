@@ -10,6 +10,8 @@
 #include "bmi088.h"
 // bsp
 #include "bsp_log.h"
+#include "chassis_math.h"
+#include "chassis_tuning.h"
 
 // 私有宏,自动将编码器转换成角度值
 #define YAW_ALIGN_ANGLE (YAW_CHASSIS_ALIGN_ECD * ECD_ANGLE_COEF_DJI) // 对齐时的角度,0-360
@@ -95,8 +97,13 @@ static void RemoteControlSet()
     // 对调左右摇杆功能：右摇杆控制云台，左摇杆控制底盘（非美国手映射）。
     gimbal_cmd_send.yaw -= 0.0007f * (float)rc_data[TEMP].rc.rocker_r_;
     gimbal_cmd_send.pitch -= 0.0005f * (float)rc_data[TEMP].rc.rocker_r1;
-    chassis_cmd_send.vx = 20.0f * chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_l_;
-    chassis_cmd_send.vy = -20.0f * chassis_remote_ratio * (float)rc_data[TEMP].rc.rocker_l1;
+    int16_t stick_x = rc_data[TEMP].rc.rocker_l_;
+    int16_t stick_y = rc_data[TEMP].rc.rocker_l1;
+    if (stick_x >= -CHASSIS_STICK_DEADBAND && stick_x <= CHASSIS_STICK_DEADBAND) stick_x = 0;
+    if (stick_y >= -CHASSIS_STICK_DEADBAND && stick_y <= CHASSIS_STICK_DEADBAND) stick_y = 0;
+    chassis_cmd_send.vx = 20.0f * chassis_remote_ratio * (float)stick_x;
+    chassis_cmd_send.vy = -20.0f * chassis_remote_ratio * (float)stick_y;
+    ChassisLimitVector(&chassis_cmd_send.vx, &chassis_cmd_send.vy, 20.0f * chassis_remote_ratio * 660.0f);
 
     /* 当前版本禁用自瞄，云台始终由右摇杆手动控制。 */
 
@@ -143,6 +150,7 @@ static void MouseKeyControlSet()
     chassis_cmd_send.vx = -(float)((rc_data[TEMP].key[KEY_PRESS].a - rc_data[TEMP].key[KEY_PRESS].d)*(25*chassis_remote_ratio * 660));
     // 当前底盘坐标定义下，W 为前进、S 为后退。
     chassis_cmd_send.vy = -(float)((rc_data[TEMP].key[KEY_PRESS].w - rc_data[TEMP].key[KEY_PRESS].s)*(25*chassis_remote_ratio * 660));
+    ChassisLimitVector(&chassis_cmd_send.vx, &chassis_cmd_send.vy, 25.0f * chassis_remote_ratio * 660.0f);
     gimbal_cmd_send.yaw -= (float)rc_data[TEMP].mouse.x * 0.05f;
     gimbal_cmd_send.pitch -= (float)rc_data[TEMP].mouse.y * 0.01f;
 

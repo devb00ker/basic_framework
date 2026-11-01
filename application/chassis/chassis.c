@@ -22,6 +22,8 @@
 #include "bsp_dwt.h"
 #include "referee_UI.h"
 #include "arm_math.h"
+#include "chassis_math.h"
+#include "chassis_tuning.h"
 
 /* 根据robot_def.h中的macro自动计算的参数 */
 #define HALF_WHEEL_BASE (WHEEL_BASE / 2.0f)     // 半轴距
@@ -48,6 +50,9 @@ static float chassis_vx, chassis_vy; // 将云台系的速度投影到底盘
 static float vt_lf, vt_rf, vt_lb, vt_rb; // 底盘速度解算后的临时输出,待进行限幅
 static float sin_theta, cos_theta;
 static float vx, vy, wz;//正向解算 出的底盘姿态
+volatile Chassis_Debug_s chassis_debug;
+static float ramp_vx, ramp_vy, ramp_wz;
+static uint32_t chassis_last_tick;
 
 void ChassisInit()
 {
@@ -103,8 +108,8 @@ void ChassisInit()
 #define LB_CENTER ((HALF_TRACK_WIDTH + CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE + CENTER_GIMBAL_OFFSET_Y) * DEGREE_2_RAD)
 #define RB_CENTER ((HALF_TRACK_WIDTH - CENTER_GIMBAL_OFFSET_X + HALF_WHEEL_BASE + CENTER_GIMBAL_OFFSET_Y) * DEGREE_2_RAD)
 /**
- * @brief 计算每个轮毂电机的输出,正运动学解算
- *        用宏进行预替换减小开销,运动解算具体过程参考教程
+ * @brief 保留已实测的旧控制比例，输出交给转子RPM速度环。
+ *        输入是历史标度控制量，不能直接按mm/s、deg/s解释。
  */
 static void Calculate()
 {
@@ -120,9 +125,14 @@ static void Calculate()
  */
 static void LimitChassisOutput()
 {
-    // 功率限制待添加
-    SetPowerLimit(referee_data->GameRobotState.chassis_power_limit > 0 ? referee_data->GameRobotState.chassis_power_limit : 40);//底盘功率
+    SetPowerLimit(referee_data->GameRobotState.chassis_power_limit);
     // referee_data->PowerHeatData.chassis_power_buffer;
+
+    float wheel[4] = {vt_lf, vt_rf, vt_lb, vt_rb};
+    chassis_debug.wheel_scale = ChassisScaleWheels(wheel, CHASSIS_WHEEL_MAX_RPM);
+    vt_lf = wheel[0]; vt_rf = wheel[1]; vt_lb = wheel[2]; vt_rb = wheel[3];
+    for (unsigned i = 0; i < 4; ++i)
+        chassis_debug.wheel_ref_rpm[i] = wheel[i];
 
     // 完成功率限制后进行电机参考输入设定
     DJIMotorSetRef(motor_lf, vt_lf);
@@ -138,11 +148,25 @@ static void LimitChassisOutput()
  */
 static void EstimateSpeed()//aps(REDUCTION_RATIO_WHEEL)减速比 从转子速度到电机速度 -> / 360.0f(aps->rps) -> *PERIMETER_WHEEL(rps->mm/s) [v=wr][PERIMETER_WHEEL=2*pi*r]{rps*2pi->rad/s*r->v} ->*1000(mm/s->m/s) 其余为解算系数
 {
-    // 根据电机速度和陀螺仪的角速度进行解算,还可以利用加速度计判断是否打滑(如果有)
-    vx = ((-motor_lf->measure.speed_aps + motor_rf->measure.speed_aps + motor_lb->measure.speed_aps - motor_rb->measure.speed_aps) / 4.0f * sqrt_2) / REDUCTION_RATIO_WHEEL / 360.0f * PERIMETER_WHEEL / 1000.0f ;
-    vy = ((motor_lf->measure.speed_aps + motor_rf->measure.speed_aps - motor_lb->measure.speed_aps - motor_rb->measure.
-        speed_aps) / 4.0f * sqrt_2) / REDUCTION_RATIO_WHEEL / 360.0f * PERIMETER_WHEEL / 1000.0f;
-    wz =  (motor_lf->measure.speed_aps - motor_rf->measure.speed_aps + motor_lb->measure.speed_aps - motor_rb->measure.speed_aps)  / (LF_CENTER + RF_CENTER + LB_CENTER + RB_CENTER);
+    DJIMotorInstance *motors[4] = {motor_lf, motor_rf, motor_lb, motor_rb};
+    float wheel[4];
+    /* 先还原逻辑方向，再将转子deg/s转换为轮缘mm/s。 */
+    for (unsigned i = 0; i < 4; ++i)
+    {
+        float sign = motors[i]->motor_settings.motor_reverse_flag == MOTOR_DIRECTION_REVERSE ? -1.0f : 1.0f;
+        float speed_aps = sign * motors[i]->measure.speed_aps;
+        chassis_debug.wheel_actual_rpm[i] = speed_aps / 6.0f;
+        wheel[i] = speed_aps / REDUCTION_RATIO_WHEEL / 360.0f * PERIMETER_WHEEL;
+    }
+    /* 四轮45度安装、旋转中心位于底盘中心时的轮缘有效力臂。 */
+    const float arm[4] = {LF_CENTER / (DEGREE_2_RAD * sqrt_2), RF_CENTER / (DEGREE_2_RAD * sqrt_2),
+                           LB_CENTER / (DEGREE_2_RAD * sqrt_2), RB_CENTER / (DEGREE_2_RAD * sqrt_2)};
+    ChassisInverse(wheel, arm, &vx, &vy, &wz);
+    vx /= 1000.0f;
+    vy /= 1000.0f;
+    chassis_debug.body_vx_mps = vx;
+    chassis_debug.body_vy_mps = vy;
+    chassis_debug.body_wz_radps = wz;
     chassis_feedback_data.real_vx = vx * cos_theta - vy * sin_theta;
     chassis_feedback_data.real_vy = +vx * sin_theta + vy * cos_theta;
 }
@@ -152,7 +176,20 @@ void ChassisTask()
 {
     SubGetMessage(chassis_sub, &chassis_cmd_recv);
 
-    SetPowerLimit(referee_data->GameRobotState.chassis_power_limit); //机器人底盘功率上限
+    uint32_t now = HAL_GetTick();
+    float dt = chassis_last_tick ? (uint32_t)(now - chassis_last_tick) * 0.001f : 0.005f;
+    chassis_last_tick = now;
+    if (dt > 0.020f) dt = 0.020f; // 调试暂停/任务延迟后不补一次大台阶
+    chassis_debug.tick_ms = now;
+    chassis_debug.dt_s = dt;
+    chassis_debug.feedback_fault_mask = PowerControlFeedbackFaultMask();
+    chassis_debug.command_invalid = !isfinite(chassis_cmd_recv.vx) || !isfinite(chassis_cmd_recv.vy) ||
+                                    !isfinite(chassis_cmd_recv.offset_angle) ||
+                                    chassis_cmd_recv.chassis_mode < CHASSIS_ZERO_FORCE ||
+                                    chassis_cmd_recv.chassis_mode > CHASSIS_FOLLOW_GIMBAL_YAW;
+    if (chassis_debug.feedback_fault_mask || chassis_debug.command_invalid)
+        chassis_cmd_recv.chassis_mode = CHASSIS_ZERO_FORCE;
+
     if (chassis_cmd_recv.chassis_mode == CHASSIS_ZERO_FORCE)
     {
         // 如果出现重要模块离线或遥控器设置为急停,让电机停止
@@ -160,6 +197,8 @@ void ChassisTask()
         DJIMotorStop(motor_rf);
         DJIMotorStop(motor_lb);
         DJIMotorStop(motor_rb);
+        ramp_vx = ramp_vy = ramp_wz = 0.0f; // 急停绕过斜坡，恢复时从零起步
+        chassis_cmd_recv.vx = chassis_cmd_recv.vy = 0.0f;
     }
     else
     {
@@ -173,27 +212,41 @@ void ChassisTask()
     // 根据控制模式设定旋转速度
     switch (chassis_cmd_recv.chassis_mode)
     {
-    case CHASSIS_NO_FOLLOW: // 底盘不旋转,但维持全向机动,一般用于调整云台姿态
-        chassis_cmd_recv.wz = 0;
-        break;
-    case CHASSIS_FOLLOW_GIMBAL_YAW: // 跟随云台,不单独设置pid,以误差角度平方为速度输出
-        // chassis_cmd_recv.wz = 2.5f * chassis_cmd_recv.offset_angle * abs(chassis_cmd_recv.offset_angle);
+    case CHASSIS_NO_FOLLOW:
+    case CHASSIS_FOLLOW_GIMBAL_YAW:
+        // 保持旧版实际行为：枪口方向平移，不新增自动追云台旋转。
+        chassis_cmd_recv.wz = 0.0f;
         break;
     case CHASSIS_ROTATE: // 自旋,同时保持全向机动;当前wz维持定值,后续增加不规则的变速策略
         chassis_cmd_recv.wz = CHASSIS_ROTATE_WZ;
         break;
     default:
+        chassis_cmd_recv.wz = 0.0f;
         break;
     }
+
+    ChassisLimitVector(&chassis_cmd_recv.vx, &chassis_cmd_recv.vy, CHASSIS_INPUT_MAX);
+    chassis_debug.input_vx = chassis_cmd_recv.vx;
+    chassis_debug.input_vy = chassis_cmd_recv.vy;
+    ChassisSlewVector(&ramp_vx, &ramp_vy, chassis_cmd_recv.vx, chassis_cmd_recv.vy,
+                      CHASSIS_INPUT_ACCEL, CHASSIS_INPUT_DECEL, dt);
+    float spin_step = CHASSIS_SPIN_SLEW * dt;
+    float spin_delta = chassis_cmd_recv.wz - ramp_wz;
+    ramp_wz += fminf(fmaxf(spin_delta, -spin_step), spin_step);
+    chassis_cmd_recv.wz = ramp_wz;
+    chassis_debug.ramp_vx = ramp_vx;
+    chassis_debug.ramp_vy = ramp_vy;
+    chassis_debug.ramp_wz = ramp_wz;
 
     // 根据云台和底盘的角度offset将控制量映射到底盘坐标系上。
     // 实测表明云台顺时针转 +offset 时，底盘“前”命令方向应为 -offset，
     // 因此这里将云台系控制量按 -offset 投影到底盘系；反馈速度投影仍使用上面的正向角度。
     // 底盘逆时针旋转为角度正方向;云台命令的方向以云台指向的方向为x,采用右手系(x指向正北时y在正东)
-    cos_theta = arm_cos_f32(chassis_cmd_recv.offset_angle * DEGREE_2_RAD);
-    sin_theta = arm_sin_f32(chassis_cmd_recv.offset_angle * DEGREE_2_RAD);
-    chassis_vx = chassis_cmd_recv.vx * cos_theta + chassis_cmd_recv.vy * sin_theta;//chassis_cmd_recv 是云台坐标系下的操作手坐标系
-    chassis_vy = -chassis_cmd_recv.vx * sin_theta + chassis_cmd_recv.vy * cos_theta;
+    float offset = isfinite(chassis_cmd_recv.offset_angle) ? chassis_cmd_recv.offset_angle : 0.0f;
+    cos_theta = arm_cos_f32(offset * DEGREE_2_RAD);
+    sin_theta = arm_sin_f32(offset * DEGREE_2_RAD);
+    chassis_vx = ramp_vx * cos_theta + ramp_vy * sin_theta;
+    chassis_vy = -ramp_vx * sin_theta + ramp_vy * cos_theta;
 
     // 根据控制模式进行正运动学解算,计算底盘输出
     Calculate();

@@ -39,4 +39,6 @@ void PowerControl(void);
  * @param power_limit 功率限制值
  */
 void SetPowerLimit(float power_limit);
+/* 按PowerControlInit注册顺序：bit0 LF、bit1 RF、bit2 LB、bit3 RB。 */
+uint32_t PowerControlFeedbackFaultMask(void);
 #endif // !DJI_MOTOR_H

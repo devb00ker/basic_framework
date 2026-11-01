@@ -2,6 +2,8 @@
 #include "general_def.h"
 #include "bsp_dwt.h"
 #include "bsp_log.h"
+#include "chassis_tuning.h"
+#include "power_limit_math.h"
 
 #define TORQUE_COEF 0.0003662109375f        // (20/16384)*(0.3), 电机转矩系数，与电流和转矩相关
 #define POWER_COEF 187.0f / 3591.0f / 9.55f // 电机机械功率系数，与力矩和转速相关，注意框架中速度单位为aps
@@ -15,7 +17,7 @@ static DJIMotorInstance* dji_motor_instance[DJI_MOTOR_CNT] = {NULL}; // 会在co
 static float initial_torque[4]; // 电机输出轴实际转矩，单位N·m
 static float A, B, C; // 测试用
 static float power_control_out[4], initial_give_power[4]; // 电机输出功率
-static float chassis_max_power, initial_total_power = 0.0f;
+static float chassis_max_power = CHASSIS_DEFAULT_POWER_W, initial_total_power = 0.0f;
 static float current_p;
 /**
  * @brief 由于DJI电机发送以四个一组的形式进行,故对其进行特殊处理,用6个(2can*3group)can_instance专门负责发送
@@ -69,7 +71,29 @@ static uint8_t sender_enable_flag[6] = {0};
  */
 void SetPowerLimit(float power_limit)
 {
-    chassis_max_power = power_limit;
+    chassis_max_power = isfinite(power_limit) && power_limit > 0.0f &&
+                        power_limit <= CHASSIS_MAX_ACCEPTED_POWER_W ? power_limit : CHASSIS_DEFAULT_POWER_W;
+}
+
+uint32_t PowerControlFeedbackFaultMask(void)
+{
+    uint32_t mask = 0;
+    for (unsigned i = 0; i < idx; ++i)
+    {
+        DJIMotorInstance *motor = dji_motor_instance[i];
+        if (!motor->feed_cnt || !DaemonIsOnline(motor->daemon) || !isfinite(motor->measure.speed_aps))
+            mask |= 1U << i;
+    }
+    return mask;
+}
+
+static void ClearWheelPID(PIDInstance *pid)
+{
+    pid->Iout = pid->ITerm = pid->Last_ITerm = 0.0f;
+    pid->Output = pid->Last_Output = pid->Dout = pid->Last_Dout = 0.0f;
+    pid->Err = pid->Last_Err = 0.0f;
+    pid->Last_Measure = pid->Measure;
+    DWT_GetDeltaT(&pid->DWT_CNT);
 }
 
 /**
@@ -200,6 +224,9 @@ static void DJIMotorLostCallback(void* motor_ptr)
 // 电机初始化,返回一个电机实例
 DJIMotorInstance* PowerControlInit(Motor_Init_Config_s* config)
 {
+    /* 功率模型和缓存仅支持四个底盘电机，防止误注册越界。 */
+    if (idx >= 4U)
+        return NULL;
     DJIMotorInstance* instance = (DJIMotorInstance*)malloc(sizeof(DJIMotorInstance));
     memset(instance, 0, sizeof(DJIMotorInstance));
 
@@ -251,6 +278,7 @@ void PowerControl()
     float pid_measure, pid_ref; // 电机PID测量值和设定值
 
     initial_total_power = 0.0f; //预估总功率
+    const uint32_t feedback_fault = PowerControlFeedbackFaultMask();
 
     // 遍历所有电机实例,进行串级PID的计算并设置发送报文的值
     for (size_t i = 0; i < idx; ++i) // idx实际上是4个
@@ -261,6 +289,12 @@ void PowerControl()
         motor_controller = &motor->motor_controller;
         measure = &motor->measure;
         pid_ref = motor_controller->pid_ref; // 保存设定值,防止motor_controller->pid_ref在计算过程中被修改
+        if (feedback_fault || motor->stop_flag == MOTOR_STOP || !isfinite(pid_ref))
+        {
+            ClearWheelPID(&motor_controller->speed_PID);
+            initial_torque[i] = initial_give_power[i] = power_control_out[i] = 0.0f;
+            continue;
+        }
         if (motor_setting->motor_reverse_flag == MOTOR_DIRECTION_REVERSE)
             pid_ref *= -1; // 设置反转
 
@@ -320,28 +354,16 @@ void PowerControl()
             float a = K1[i];
             float b = TORQUE_COEF * POWER_COEF * pid_measure;
             float c = K2[i] * pid_measure * pid_measure - initial_give_power[i] + constant[i];
-            if (power_control_out[i] > 0)
-            {
-                power_control_out[i] = (-b + sqrt(b * b - 4 * a * c)) / (2 * a); //求根公式
-                if (power_control_out[i] > 15000)
-                {
-                    power_control_out[i] = 15000;
-                }
-            }
-            else
-            {
-                power_control_out[i] = (-b - sqrt(b * b - 4 * a * c)) / (2 * a);
-                if (power_control_out[i] < -15000)
-                {
-                    power_control_out[i] = -15000;
-                }
-            }
+            power_control_out[i] = PowerLimitCurrent(power_control_out[i], a, b, c);
         }
     }
 
     for (uint8_t i = 0; i < idx; i++)
     {
         motor = dji_motor_instance[i];
+        if (!isfinite(power_control_out[i]))
+            power_control_out[i] = 0.0f;
+        power_control_out[i] = fminf(15000.0f, fmaxf(-15000.0f, power_control_out[i]));
         set = (int16_t)power_control_out[i];
         group = motor->sender_group;
         num = motor->message_num;
