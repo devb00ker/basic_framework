@@ -47,8 +47,62 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
-build
-./idea
+# CLion / CMake: generated files and per-machine configuration
+/build/
+/cmake-build-*/
+/.idea/
+/.cache/
+/.clangd/
+**/.cache/clangd/
+/CMakeFiles/
+/CMakeCache.txt
+/cmake_install.cmake
+/CTestTestfile.cmake
+/build.ninja
+/.ninja_deps
+/.ninja_log
+/compile_commands.json
+/CMakeUserPresets.json
+
+# Firmware files generated outside the build directory
+/basic_framework.bin
+/basic_framework.hex
+
+# Local logs, temporary files and editor backups
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+~$*
+
+# Archives and recordings: keep large backups outside the source repository
+*.zip
+*.7z
+*.rar
+*.tar
+*.tar.gz
+*.tgz
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.webm
+
+# OS metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Keep source files, headers and required project assets under version control.
+# Do NOT ignore application/, bsp/, modules/, Drivers/, Middlewares/,
+# *.c, *.h, *.s, *.a, *.ioc, *.ld, *.cfg, *.md or CMakeLists.txt.
+# In particular, the three recovered *_math.h / *_tuning.h files must be tracked.
+# .gitignore filters untracked files; it does not lock code or affect tracked files.
+
+# Local debugger state (shared VSCode configuration stays tracked)
 .vscode/.cortex-debug.peripherals.state.json
 .vscode/.cortex-debug.registers.state.json
 *.jdebug*
